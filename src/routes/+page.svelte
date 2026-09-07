@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { confirm } from "@tauri-apps/plugin-dialog";
@@ -19,26 +20,12 @@
     getCurrentWindow().setTitle(title);
   });
 
+  // 新規/開く/保存/名前を付けて保存/タブを閉じる は各OSのネイティブメニューの
+  // アクセラレータ(handleMenuAction 経由)で処理するため、ここでは扱わない。
+  // 両方で処理すると環境によってはキー入力が二重発火するおそれがある。
   function handleKeydown(event: KeyboardEvent) {
     if (!event.ctrlKey && !event.metaKey) return;
     switch (event.key.toLowerCase()) {
-      case "n":
-        event.preventDefault();
-        workspace.newTab();
-        break;
-      case "o":
-        event.preventDefault();
-        workspace.open();
-        break;
-      case "s":
-        event.preventDefault();
-        if (event.shiftKey) workspace.saveAs();
-        else workspace.save();
-        break;
-      case "w":
-        event.preventDefault();
-        if (workspace.activeId) workspace.closeTab(workspace.activeId);
-        break;
       case "tab":
         event.preventDefault();
         workspace.selectRelative(event.shiftKey ? -1 : 1);
@@ -59,9 +46,33 @@
     }
   }
 
+  function handleMenuAction(action: string) {
+    switch (action) {
+      case "new":
+        workspace.newTab();
+        break;
+      case "open":
+        workspace.open();
+        break;
+      case "save":
+        workspace.save();
+        break;
+      case "save_as":
+        workspace.saveAs();
+        break;
+      case "close_tab":
+        if (workspace.activeId) workspace.closeTab(workspace.activeId);
+        break;
+    }
+  }
+
   onMount(() => {
     const detachEditor = workspace.attach(host);
     const appWindow = getCurrentWindow();
+
+    const menuAction = listen<string>("menu-action", (event) =>
+      handleMenuAction(event.payload),
+    );
 
     // OS がファイルドロップを横取りするため、Tauri のイベントで受け取る
     const dragDrop = getCurrentWebview().onDragDropEvent((event) => {
@@ -81,6 +92,7 @@
     window.addEventListener("keydown", handleKeydown);
     return () => {
       window.removeEventListener("keydown", handleKeydown);
+      menuAction.then((unlisten) => unlisten());
       dragDrop.then((unlisten) => unlisten());
       closeRequested.then((unlisten) => unlisten());
       detachEditor();
