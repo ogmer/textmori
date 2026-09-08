@@ -1,5 +1,6 @@
 import { EditorState, Text } from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   confirm,
   open as openDialog,
@@ -101,7 +102,9 @@ export class Workspace {
   }
 
   newTab(): void {
-    this.#addTab(new Tab(this.#createState("")));
+    const tab = new Tab(this.#createState(""));
+    this.tabs.push(tab);
+    this.#activate(tab);
   }
 
   async open(): Promise<void> {
@@ -155,7 +158,8 @@ export class Workspace {
     }
     this.tabs.splice(index, 1);
     if (this.tabs.length === 0) {
-      this.newTab();
+      // 最後のタブを閉じたらウィンドウごと終了する
+      await getCurrentWindow().destroy();
     } else if (this.activeId === id) {
       this.#activate(this.tabs[Math.min(index, this.tabs.length - 1)]);
     }
@@ -198,9 +202,9 @@ export class Workspace {
     if (tab) tab.editorState = update.state;
   };
 
+  /** ファイルを開く際に使う。未編集の「無題」タブしかない場合はそれを置き換える。 */
   #addTab(tab: Tab): void {
     const current = this.active;
-    // 未編集の「無題」タブしかない場合は置き換える
     if (this.tabs.length === 1 && current && !current.path && !current.dirty) {
       this.tabs = [tab];
     } else {

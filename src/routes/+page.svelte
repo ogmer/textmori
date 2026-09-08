@@ -4,11 +4,15 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { confirm } from "@tauri-apps/plugin-dialog";
+  import SettingsPanel from "$lib/components/SettingsPanel.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
   import TabBar from "$lib/components/TabBar.svelte";
+  import { settings } from "$lib/settings.svelte";
+  import { checkForUpdates } from "$lib/updater";
   import { DEFAULT_FONT_SIZE, workspace } from "$lib/workspace.svelte";
 
   let host: HTMLDivElement;
+  let settingsOpen = $state(false);
 
   const status = $derived(workspace.status);
 
@@ -63,12 +67,20 @@
       case "close_tab":
         if (workspace.activeId) workspace.closeTab(workspace.activeId);
         break;
+      case "check_for_updates":
+        checkForUpdates(false);
+        break;
+      case "settings":
+        settingsOpen = true;
+        break;
     }
   }
 
   onMount(() => {
     const detachEditor = workspace.attach(host);
     const appWindow = getCurrentWindow();
+
+    if (settings.autoUpdateEnabled) checkForUpdates(true);
 
     const menuAction = listen<string>("menu-action", (event) =>
       handleMenuAction(event.payload),
@@ -106,13 +118,20 @@
     <button type="button" onclick={() => workspace.open()}>開く</button>
     <button type="button" onclick={() => workspace.save()}>保存</button>
     <button type="button" onclick={() => workspace.saveAs()}>名前を付けて保存</button>
+    <span class="spacer"></span>
+    <button type="button" onclick={() => (settingsOpen = true)}>設定</button>
   </header>
+
+  {#if settingsOpen}
+    <SettingsPanel onclose={() => (settingsOpen = false)} />
+  {/if}
 
   <TabBar
     tabs={workspace.tabs}
     activeId={workspace.activeId}
     onselect={(id) => workspace.select(id)}
     onclose={(id) => workspace.closeTab(id)}
+    onnew={() => workspace.newTab()}
   />
 
   <div class="editor" bind:this={host}></div>
@@ -215,6 +234,10 @@
 
   .toolbar button:active {
     background: var(--selection);
+  }
+
+  .toolbar .spacer {
+    flex: 1;
   }
 
   .editor {

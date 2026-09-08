@@ -6,11 +6,13 @@
     activeId,
     onselect,
     onclose,
+    onnew,
   }: {
     tabs: Tab[];
     activeId: string | null;
     onselect: (id: string) => void;
     onclose: (id: string) => void;
+    onnew: () => void;
   } = $props();
 </script>
 
@@ -37,6 +39,9 @@
       >
     </div>
   {/each}
+  <button type="button" class="add" title="新規タブ" aria-label="新規タブ" onclick={onnew}
+    >+</button
+  >
 </div>
 
 <style>
@@ -114,6 +119,23 @@
   }
 
   .close:hover {
+    color: var(--fg);
+    background: var(--hover);
+  }
+
+  .add {
+    flex: 0 0 auto;
+    width: 2.2em;
+    align-self: stretch;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .add:hover {
     color: var(--fg);
     background: var(--hover);
   }

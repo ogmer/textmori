@@ -21,6 +21,9 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "close_tab", "タブを閉じる", true, Some("CmdOrCtrl+W"))?,
             &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "check_for_updates", "アップデートを確認...", true, None::<&str>)?,
+            &MenuItem::with_id(app, "settings", "設定...", true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::quit(app, Some("終了"))?,
         ],
     )?;
@@ -73,6 +76,8 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
         "save" => "save",
         "save_as" => "save_as",
         "close_tab" => "close_tab",
+        "check_for_updates" => "check_for_updates",
+        "settings" => "settings",
         _ => return,
     };
     let _ = app.emit("menu-action", action);
@@ -83,6 +88,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;
