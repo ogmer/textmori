@@ -48,9 +48,9 @@
   .tabbar {
     display: flex;
     align-items: stretch;
+    min-width: 0;
     overflow-x: auto;
     background: var(--tabbar-bg);
-    border-bottom: 1px solid var(--border);
     scrollbar-width: thin;
   }
 
