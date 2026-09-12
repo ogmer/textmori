@@ -74,6 +74,12 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &MenuItem::with_id(app, "zoom_reset", "既定のサイズに戻す", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "toggle_wrap", "行の折り返し", true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "toggle_split", "分割ビュー", true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "theme_system", "配色: システムに従う", true, None::<&str>)?,
+            &MenuItem::with_id(app, "theme_light", "配色: ライト", true, None::<&str>)?,
+            &MenuItem::with_id(app, "theme_dark", "配色: ダーク", true, None::<&str>)?,
         ],
     )?;
 
@@ -91,8 +97,17 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(
+            // ウィンドウの位置・サイズ・最大化状態を自動的に保存し、次回起動時に復元する。
+            // 装飾(decorations)は自前で管理しているため対象から外す。
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED,
+                )
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             encoding::read_text_file_detect,
             encoding::write_text_file_encoded,

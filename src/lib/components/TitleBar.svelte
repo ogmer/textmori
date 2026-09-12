@@ -20,43 +20,45 @@
   const appWindow = getCurrentWindow();
 </script>
 
+<!-- Windows / Linux 用のタイトルバー。ウィンドウ操作はこの OS の作法(右側に
+     最小化/最大化/閉じる)に合わせ、macOS のトラフィックライトは使わない。 -->
 <header class="titlebar" data-tauri-drag-region>
-  <!-- macOS のトラフィックライトを模した信号(赤=閉じる/黄=最小化/緑=最大化) -->
-  <div class="traffic-lights">
-    <button
-      type="button"
-      class="light close"
-      aria-label="閉じる"
-      onclick={() => appWindow.close()}
-    >
-      <svg viewBox="0 0 10 10" aria-hidden="true"
-        ><path d="M2.2 2.2 L7.8 7.8 M7.8 2.2 L2.2 7.8" /></svg
-      >
-    </button>
-    <button
-      type="button"
-      class="light minimize"
-      aria-label="最小化"
-      onclick={() => appWindow.minimize()}
-    >
-      <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5 H8" /></svg>
-    </button>
-    <button
-      type="button"
-      class="light maximize"
-      aria-label="最大化"
-      onclick={() => appWindow.toggleMaximize()}
-    >
-      <svg viewBox="0 0 10 10" aria-hidden="true"
-        ><path d="M2.5 2.5 H7.5 V7.5 H2.5 Z" /></svg
-      >
-    </button>
+  <div class="brand" data-tauri-drag-region>
+    <span class="icon" aria-hidden="true">📝</span>
+    <span class="name">textmori</span>
   </div>
 
   <TabBar {tabs} {activeId} {onselect} {onclose} {onnew} />
 
   <!-- タブの右側の余白はウィンドウのドラッグ領域にする -->
   <div class="drag" data-tauri-drag-region></div>
+
+  <div class="controls">
+    <button
+      type="button"
+      class="control"
+      aria-label="最小化"
+      onclick={() => appWindow.minimize()}
+    >
+      &#xE921;
+    </button>
+    <button
+      type="button"
+      class="control"
+      aria-label="最大化"
+      onclick={() => appWindow.toggleMaximize()}
+    >
+      &#xE922;
+    </button>
+    <button
+      type="button"
+      class="control close"
+      aria-label="閉じる"
+      onclick={() => appWindow.close()}
+    >
+      &#xE8BB;
+    </button>
+  </div>
 </header>
 
 <style>
@@ -67,57 +69,57 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .traffic-lights {
+  .brand {
     display: flex;
     align-items: center;
-    gap: 0.5em;
-    padding: 0 0.55em 0 0.7em;
+    gap: 0.4em;
+    padding: 0 0.6em 0 0.7em;
+    color: var(--fg);
+    font-size: 0.82rem;
+    font-weight: 600;
+    user-select: none;
   }
 
-  .light {
-    width: 0.78em;
-    height: 0.78em;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
+  .brand .icon {
+    font-size: 0.95rem;
   }
 
-  .light svg {
-    width: 60%;
-    height: 60%;
-    stroke: rgba(0, 0, 0, 0.55);
-    stroke-width: 1.4;
-    fill: none;
-    opacity: 0;
-  }
-
-  .traffic-lights:hover svg,
-  .light:focus-visible svg {
-    opacity: 1;
-  }
-
-  .light.close {
-    background: #ff5f57;
-  }
-
-  .light.minimize {
-    background: #febc2e;
-  }
-
-  .light.maximize {
-    background: #28c840;
-  }
-
-  .light.close svg {
-    fill: rgba(0, 0, 0, 0.55);
+  /* 絵文字アイコンは字面が上寄り・大きめに見えるため、テキストを少し
+     右下にずらして視覚的な中心をアイコンに合わせる */
+  .brand .name {
+    position: relative;
+    top: 0.1em;
+    left: 0.05em;
   }
 
   .drag {
     flex: 1;
     min-width: 1rem;
+  }
+
+  .controls {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .control {
+    width: 2.9rem;
+    border: 0;
+    background: none;
+    color: var(--fg);
+    /* Windows のウィンドウ操作アイコン用フォント。無い環境では通常フォントで代替される */
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", var(--font-ui);
+    font-size: 0.62rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .control:hover {
+    background: var(--hover);
+  }
+
+  .control.close:hover {
+    background: #c42b1c;
+    color: #fff;
   }
 </style>

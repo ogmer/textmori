@@ -1,10 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import { watchImmediate } from "@tauri-apps/plugin-fs";
 
+export type Theme = "system" | "light" | "dark";
+
 /** Rust 側 (src-tauri/src/config.rs) の AppConfig と対応する JSON 表現 */
 interface RawConfig {
-  "auto-update": boolean;
   "font-family": string;
+  theme: string;
+}
+
+function isTheme(value: unknown): value is Theme {
+  return value === "system" || value === "light" || value === "dark";
 }
 
 /**
@@ -13,8 +19,9 @@ interface RawConfig {
  * ファイルを直接編集した場合も、保存した瞬間にアプリへ反映される。
  */
 class Config {
-  autoUpdate = $state(true);
   fontFamily = $state("");
+  /** 既定は system(OS の配色設定に追従)。 */
+  theme = $state<Theme>("system");
 
   #ignoreNextWatchEvent = false;
 
@@ -28,19 +35,19 @@ class Config {
     this.#watch();
   }
 
-  async setAutoUpdate(value: boolean): Promise<void> {
-    this.autoUpdate = value;
-    await this.#persist();
-  }
-
   async setFontFamily(value: string): Promise<void> {
     this.fontFamily = value;
     await this.#persist();
   }
 
+  async setTheme(value: Theme): Promise<void> {
+    this.theme = value;
+    await this.#persist();
+  }
+
   #apply(raw: Partial<RawConfig>): void {
-    if (typeof raw["auto-update"] === "boolean") this.autoUpdate = raw["auto-update"];
     if (typeof raw["font-family"] === "string") this.fontFamily = raw["font-family"];
+    if (isTheme(raw.theme)) this.theme = raw.theme;
   }
 
   async #persist(): Promise<void> {
@@ -48,7 +55,7 @@ class Config {
       // 自分自身の書き込みで発火する watch イベントは無視して二重読み込みを防ぐ
       this.#ignoreNextWatchEvent = true;
       await invoke("write_config", {
-        config: { "auto-update": this.autoUpdate, "font-family": this.fontFamily },
+        config: { "font-family": this.fontFamily, theme: this.theme },
       });
     } catch (error) {
       console.error("設定ファイルの保存に失敗しました", error);

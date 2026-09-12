@@ -8,17 +8,17 @@ const CONFIG_FILE_NAME: &str = "textmori.conf";
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AppConfig {
-    #[serde(rename = "auto-update")]
-    pub auto_update: bool,
     #[serde(rename = "font-family")]
     pub font_family: String,
+    /// system / light / dark。system は OS の配色設定に追従する。
+    pub theme: String,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            auto_update: true,
             font_family: String::new(),
+            theme: "system".to_string(),
         }
     }
 }
@@ -42,8 +42,12 @@ fn parse(text: &str) -> AppConfig {
         let key = key.trim();
         let value = value.trim();
         match key {
-            "auto-update" => config.auto_update = value.eq_ignore_ascii_case("true"),
             "font-family" => config.font_family = value.to_string(),
+            "theme" => {
+                if matches!(value, "system" | "light" | "dark") {
+                    config.theme = value.to_string();
+                }
+            }
             _ => {}
         }
     }
@@ -55,12 +59,12 @@ fn serialize(config: &AppConfig) -> String {
         "# textmori 設定ファイル\n\
          # 保存すると自動的に反映されます(アプリの再起動は不要)。\n\
          \n\
-         # 起動時に自動でアップデートを確認する (true / false)\n\
-         auto-update = {}\n\
-         \n\
          # エディタのフォント。空にするとシステムの既定フォントを使う\n\
-         font-family = {}\n",
-        config.auto_update, config.font_family,
+         font-family = {}\n\
+         \n\
+         # 配色: system(OS の設定に追従) / light / dark\n\
+         theme = {}\n",
+        config.font_family, config.theme,
     )
 }
 
@@ -88,4 +92,65 @@ pub fn write_config<R: Runtime>(app: AppHandle<R>, config: AppConfig) -> Result<
 #[tauri::command]
 pub fn config_file_path<R: Runtime>(app: AppHandle<R>) -> Result<String, String> {
     Ok(config_path(&app)?.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_font_family() {
+        let config = parse("font-family = Cascadia Mono\n");
+        assert_eq!(config.font_family, "Cascadia Mono");
+    }
+
+    #[test]
+    fn ignores_comments_and_blank_lines() {
+        let config = parse("# comment\n\n  # indented comment\nfont-family = Consolas\n");
+        assert_eq!(config.font_family, "Consolas");
+    }
+
+    #[test]
+    fn ignores_unknown_keys() {
+        let config = parse("unknown-key = value\nfont-family = Menlo\n");
+        assert_eq!(config.font_family, "Menlo");
+    }
+
+    #[test]
+    fn defaults_to_empty_font_family_when_absent() {
+        let config = parse("");
+        assert_eq!(config.font_family, "");
+    }
+
+    #[test]
+    fn defaults_theme_to_system() {
+        let config = parse("");
+        assert_eq!(config.theme, "system");
+    }
+
+    #[test]
+    fn parses_valid_theme_values() {
+        assert_eq!(parse("theme = light\n").theme, "light");
+        assert_eq!(parse("theme = dark\n").theme, "dark");
+        assert_eq!(parse("theme = system\n").theme, "system");
+    }
+
+    #[test]
+    fn ignores_invalid_theme_value() {
+        // 不正な値は既定の system のまま(壊れた設定ファイルでクラッシュしない)
+        let config = parse("theme = rainbow\n");
+        assert_eq!(config.theme, "system");
+    }
+
+    #[test]
+    fn serialize_then_parse_roundtrips() {
+        let original = AppConfig {
+            font_family: "JetBrains Mono".to_string(),
+            theme: "dark".to_string(),
+        };
+        let text = serialize(&original);
+        let parsed = parse(&text);
+        assert_eq!(parsed.font_family, original.font_family);
+        assert_eq!(parsed.theme, original.theme);
+    }
 }

@@ -8,6 +8,7 @@ import {
 } from "@tauri-apps/plugin-clipboard-manager";
 import {
   confirm,
+  message,
   open as openDialog,
   save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
@@ -32,6 +33,7 @@ export const DEFAULT_ENCODING: TextEncoding = "UTF-8";
 interface DecodedFile {
   content: string;
   encoding: TextEncoding;
+  hadErrors: boolean;
 }
 
 async function readTextFileDetect(path: string): Promise<DecodedFile> {
@@ -50,7 +52,7 @@ async function writeTextFileEncoded(
   await invoke("write_text_file_encoded", { path, content, encoding });
 }
 
-const UNTITLED = "無題";
+const UNTITLED = "タイトルなし";
 /** タブ名に使う 1 行目テキストの最大文字数 */
 const TAB_NAME_MAX_LENGTH = 24;
 
@@ -141,12 +143,20 @@ export class Tab {
   }
 }
 
+export type SplitDirection = "vertical" | "horizontal";
+
 export class Workspace {
   tabs = $state<Tab[]>([]);
   activeId = $state<string | null>(null);
   wrap = $state(true);
   zoom = $state(DEFAULT_ZOOM);
+  /** 分割ビュー: 有効な間は同じアクティブタブを2つのペインに表示し、
+   *  内容は同期しつつスクロール位置・カーソルは独立させる。 */
+  splitOpen = $state(false);
+  splitDirection = $state<SplitDirection>("vertical");
   #view: EditorView | null = null;
+  #splitView: EditorView | null = null;
+  #syncingSplit = false;
 
   get active(): Tab | null {
     return this.tabs.find((tab) => tab.id === this.activeId) ?? null;
@@ -178,6 +188,30 @@ export class Workspace {
     };
   }
 
+  /** 分割ビューの2つ目のペインを DOM にマウントする。常に主ペインと同じタブを表示する。 */
+  attachSplit(parent: HTMLElement): () => void {
+    const tab = this.active;
+    this.#splitView = new EditorView({
+      state: tab ? tab.editorState : this.#createState(""),
+      parent,
+    });
+    return () => {
+      this.#splitView?.destroy();
+      this.#splitView = null;
+    };
+  }
+
+  /** 分割ビューの表示/非表示を切り替える。既に同じ向きで開いていれば閉じ、
+   *  別の向きで開いていればその向きに切り替える。 */
+  toggleSplit(direction: SplitDirection = "vertical"): void {
+    if (this.splitOpen && this.splitDirection === direction) {
+      this.splitOpen = false;
+    } else {
+      this.splitDirection = direction;
+      this.splitOpen = true;
+    }
+  }
+
   newTab(): void {
     const tab = new Tab(this.#createState(""));
     this.tabs.push(tab);
@@ -198,9 +232,15 @@ export class Workspace {
         this.#activate(opened);
         continue;
       }
-      const { content, encoding } = await readTextFileDetect(path);
+      const { content, encoding, hadErrors } = await readTextFileDetect(path);
       const eol: Eol = content.includes("\r\n") ? "CRLF" : "LF";
       this.#addTab(new Tab(this.#createState(content, path), path, eol, encoding));
+      if (hadErrors) {
+        await message(
+          "文字コードを完全には判別できなかったため、一部の文字が置換されている可能性があります。",
+          { title: "textmori", kind: "warning" },
+        );
+      }
     }
   }
 
@@ -224,9 +264,9 @@ export class Workspace {
     target.savedDoc = target.editorState.doc;
     // 拡張子が変わって Markdown になった/でなくなった場合に備えて装飾を再設定する
     if (this.activeId === target.id) {
-      this.#view?.dispatch({
-        effects: markdownCompartment.reconfigure(markdownExtension(isMarkdownPath(path))),
-      });
+      const effects = markdownCompartment.reconfigure(markdownExtension(isMarkdownPath(path)));
+      this.#view?.dispatch({ effects });
+      this.#splitView?.dispatch({ effects });
     }
     this.#persistNow();
   }
@@ -363,10 +403,27 @@ export class Workspace {
     return createEditorState(doc, this.wrap, isMarkdownPath(path), this.#onUpdate);
   }
 
-  /** エディタの変更を常にアクティブなタブへ書き戻し、派生状態を最新に保つ */
+  /** エディタの変更をアクティブなタブへ書き戻し、派生状態を最新に保つ。
+   *  分割ビューが同じタブを表示している場合は、内容の変更だけをもう一方の
+   *  ペインにも転送して同期する(カーソル位置・スクロールは独立させたいので
+   *  setState ではなく変更差分のみを dispatch する)。 */
   #onUpdate = (update: ViewUpdate): void => {
+    const isPrimary = update.view === this.#view;
+    const isSplit = update.view === this.#splitView;
     const tab = this.active;
-    if (tab) tab.editorState = update.state;
+    if (tab && (isPrimary || isSplit)) tab.editorState = update.state;
+
+    if (!this.#syncingSplit && update.docChanged && tab) {
+      const otherView = isPrimary ? this.#splitView : isSplit ? this.#view : null;
+      if (otherView) {
+        this.#syncingSplit = true;
+        try {
+          otherView.dispatch({ changes: update.changes });
+        } finally {
+          this.#syncingSplit = false;
+        }
+      }
+    }
     this.#schedulePersist();
   };
 
@@ -385,17 +442,16 @@ export class Workspace {
   #activate(tab: Tab): void {
     this.activeId = tab.id;
     this.#view?.setState(tab.editorState);
+    this.#splitView?.setState(tab.editorState);
     this.#applyWrap();
     this.#view?.focus();
   }
 
   /** 折り返し設定は状態ごとに持つため、アクティブな状態へ都度反映する */
   #applyWrap(): void {
-    this.#view?.dispatch({
-      effects: wrapCompartment.reconfigure(
-        this.wrap ? EditorView.lineWrapping : [],
-      ),
-    });
+    const effects = wrapCompartment.reconfigure(this.wrap ? EditorView.lineWrapping : []);
+    this.#view?.dispatch({ effects });
+    this.#splitView?.dispatch({ effects });
   }
 
   #persistTimer: ReturnType<typeof setTimeout> | null = null;

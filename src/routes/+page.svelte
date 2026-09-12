@@ -11,10 +11,10 @@
   import TabBar from "$lib/components/TabBar.svelte";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import { config } from "$lib/config.svelte";
-  import { checkForUpdates } from "$lib/updater";
   import { BASE_FONT_SIZE, DEFAULT_ZOOM, workspace } from "$lib/workspace.svelte";
 
   let host: HTMLDivElement;
+  let splitHost: HTMLDivElement | undefined = $state();
   let settingsOpen = $state(false);
 
   const status = $derived(workspace.status);
@@ -38,6 +38,16 @@
     appWindow.setTitle(title);
   });
 
+  // 配色: "system" のときは data-theme を外し、OS の設定(prefers-color-scheme)
+  // に追従する CSS へフォールバックする。"light"/"dark" は明示的に上書きする。
+  $effect(() => {
+    if (config.theme === "system") {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = config.theme;
+    }
+  });
+
   const menus: MenuDefinition[] = $derived([
     {
       label: "ファイル",
@@ -58,8 +68,7 @@
           action: () => workspace.activeId && workspace.closeTab(workspace.activeId),
         },
         "separator",
-        { label: "設定...", action: () => (settingsOpen = true) },
-        { label: "アップデートを確認...", action: () => checkForUpdates(false) },
+        { label: "設定...", accelerator: "F1", action: () => (settingsOpen = true) },
         "separator",
         { label: "終了", accelerator: "Alt+F4", action: () => appWindow.close() },
       ],
@@ -105,15 +114,60 @@
         "separator",
         {
           label: "行の折り返し",
+          accelerator: "Alt+Z",
           checked: workspace.wrap,
           action: () => workspace.toggleWrap(),
+        },
+        "separator",
+        {
+          label: "右に分割",
+          accelerator: "Ctrl+\\",
+          checked: workspace.splitOpen && workspace.splitDirection === "vertical",
+          action: () => workspace.toggleSplit("vertical"),
+        },
+        {
+          label: "下に分割",
+          checked: workspace.splitOpen && workspace.splitDirection === "horizontal",
+          action: () => workspace.toggleSplit("horizontal"),
+        },
+        "separator",
+        {
+          label: "配色: システムに従う",
+          checked: config.theme === "system",
+          action: () => config.setTheme("system"),
+        },
+        {
+          label: "配色: ライト",
+          checked: config.theme === "light",
+          action: () => config.setTheme("light"),
+        },
+        {
+          label: "配色: ダーク",
+          checked: config.theme === "dark",
+          action: () => config.setTheme("dark"),
         },
       ],
     },
   ]);
 
   function handleKeydown(event: KeyboardEvent) {
-    if (!event.ctrlKey && !event.metaKey) return;
+    // 折り返し切り替え(Alt+Z)と設定(F1)は Ctrl 系ではないため先に処理する
+    if (!event.ctrlKey && !event.metaKey) {
+      if (event.altKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        workspace.toggleWrap();
+      } else if (event.key === "F1") {
+        event.preventDefault();
+        settingsOpen = true;
+      }
+      return;
+    }
+
+    // input/textarea (設定パネルなど) にフォーカスがある間は、その要素自身の
+    // 標準的なコピー/元に戻す等の挙動を優先し、エディタ向けの処理を横取りしない
+    const target = event.target as HTMLElement | null;
+    const isFormField = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+
     switch (event.key.toLowerCase()) {
       case "n":
         event.preventDefault();
@@ -149,6 +203,51 @@
         event.preventDefault();
         workspace.setZoom(DEFAULT_ZOOM);
         break;
+      case "x":
+        if (isFormField) return;
+        event.preventDefault();
+        workspace.cut();
+        break;
+      case "c":
+        if (isFormField) return;
+        event.preventDefault();
+        workspace.copy();
+        break;
+      case "v":
+        if (isFormField) return;
+        event.preventDefault();
+        workspace.paste();
+        break;
+      case "z":
+        // CodeMirror の historyKeymap が既に処理済みなら二重実行しない
+        if (isFormField || event.defaultPrevented) return;
+        event.preventDefault();
+        workspace.runCommand(undo);
+        break;
+      case "y":
+        if (isFormField || event.defaultPrevented) return;
+        event.preventDefault();
+        workspace.runCommand(redo);
+        break;
+      case "a":
+        if (isFormField || event.defaultPrevented) return;
+        event.preventDefault();
+        workspace.runCommand(selectAll);
+        break;
+      case "f":
+        if (isFormField || event.defaultPrevented) return;
+        event.preventDefault();
+        workspace.runCommand(openSearchPanel);
+        break;
+      case "h":
+        if (isFormField || event.defaultPrevented) return;
+        event.preventDefault();
+        workspace.runCommand(openSearchPanel);
+        break;
+      case "\\":
+        event.preventDefault();
+        workspace.toggleSplit("vertical");
+        break;
     }
   }
 
@@ -182,6 +281,18 @@
       case "toggle_wrap":
         workspace.toggleWrap();
         break;
+      case "toggle_split":
+        workspace.toggleSplit("vertical");
+        break;
+      case "theme_system":
+        config.setTheme("system");
+        break;
+      case "theme_light":
+        config.setTheme("light");
+        break;
+      case "theme_dark":
+        config.setTheme("dark");
+        break;
       case "settings":
         settingsOpen = true;
         break;
@@ -193,13 +304,6 @@
 
     // 設定ファイルの読み込み・監視は起動直後の描画を邪魔しないよう後回しにする
     config.load();
-
-    // アップデート確認はネットワーク I/O を伴うため、起動直後の描画や
-    // タイピング開始を妨げないよう少し遅らせてから行う(Ghostty の
-    // 「起動を軽く保つ」考え方に倣う)。
-    const updateCheckTimer = setTimeout(() => {
-      if (config.autoUpdate) checkForUpdates(true);
-    }, 1500);
 
     const menuAction = listen<string>("menu-action", (event) =>
       handleMenuAction(event.payload),
@@ -216,11 +320,17 @@
     window.addEventListener("keydown", handleKeydown);
     return () => {
       window.removeEventListener("keydown", handleKeydown);
-      clearTimeout(updateCheckTimer);
       menuAction.then((unlisten) => unlisten());
       dragDrop.then((unlisten) => unlisten());
       detachEditor();
     };
+  });
+
+  // 分割ビューの開閉に合わせて、2つ目の CodeMirror インスタンスを都度マウント/破棄する
+  $effect(() => {
+    if (!workspace.splitOpen || !splitHost) return;
+    const detachSplit = workspace.attachSplit(splitHost);
+    return detachSplit;
   });
 </script>
 
@@ -249,7 +359,13 @@
     <MenuBar {menus} />
   {/if}
 
-  <div class="editor" bind:this={host}></div>
+  <div class="editor-area" class:horizontal={workspace.splitDirection === "horizontal"}>
+    <div class="editor" bind:this={host}></div>
+    {#if workspace.splitOpen}
+      <div class="editor-divider" aria-hidden="true"></div>
+      <div class="editor" bind:this={splitHost}></div>
+    {/if}
+  </div>
 
   <StatusBar
     line={status.line}
@@ -295,14 +411,18 @@
     --selection: #b9d4f6;
     --match: rgba(59, 116, 216, 0.18);
     --match-active: rgba(59, 116, 216, 0.38);
+    --scrollbar-thumb: rgba(121, 121, 121, 0.35);
+    --scrollbar-thumb-hover: rgba(100, 100, 100, 0.6);
     --font-ui: "Segoe UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
     --font-mono: "Cascadia Mono", Consolas, "Noto Sans Mono", "Hiragino Sans",
       monospace;
     color-scheme: light dark;
   }
 
+  /* 配色が "system" (data-theme 未指定)のときだけ OS の設定に追従する。
+     "light" が明示された場合はこのブロックを無効化する。 */
   @media (prefers-color-scheme: dark) {
-    :global(:root) {
+    :global(:root:not([data-theme="light"])) {
       --bg: #1e1e1e;
       --chrome-bg: #252526;
       --tabbar-bg: #202021;
@@ -316,7 +436,28 @@
       --selection: #2c4f7c;
       --match: rgba(91, 155, 255, 0.2);
       --match-active: rgba(91, 155, 255, 0.4);
+      --scrollbar-thumb: rgba(150, 150, 150, 0.35);
+      --scrollbar-thumb-hover: rgba(180, 180, 180, 0.55);
     }
+  }
+
+  /* 配色を "dark" に明示した場合は OS の設定に関わらず常にダークにする */
+  :global(:root[data-theme="dark"]) {
+    --bg: #1e1e1e;
+    --chrome-bg: #252526;
+    --tabbar-bg: #202021;
+    --tab-bg: #2a2a2b;
+    --fg: #e6e6e6;
+    --muted: #9d9d9d;
+    --border: #3a3a3a;
+    --hover: rgba(255, 255, 255, 0.09);
+    --accent: #5b9bff;
+    --active-line: rgba(255, 255, 255, 0.08);
+    --selection: #2c4f7c;
+    --match: rgba(91, 155, 255, 0.2);
+    --match-active: rgba(91, 155, 255, 0.4);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
   }
 
   :global(html),
@@ -332,15 +473,73 @@
     overflow: hidden;
   }
 
+  /* スクロールバーはトラックを透明にし、つまみだけ半透明で重ねて表示する
+     (オーバーレイ風)。Chromium(WebView2)向けの疑似要素なので Firefox/Safari
+     では既定のスクロールバーにフォールバックする。 */
+  :global(*) {
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  :global(*)::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  :global(*)::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  :global(*)::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  :global(*)::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    background-clip: padding-box;
+    border: 1px solid transparent;
+    border-radius: 8px;
+  }
+
+  :global(*)::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+    background-clip: padding-box;
+  }
+
   .app {
     display: flex;
     flex-direction: column;
     height: 100vh;
   }
 
+  .editor-area {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* 「右に分割」= 横並び(デフォルト)、「下に分割」= 縦並び */
+  .editor-area.horizontal {
+    flex-direction: column;
+  }
+
+  .editor-divider {
+    flex: 0 0 auto;
+    background: var(--border);
+  }
+
+  .editor-area:not(.horizontal) > .editor-divider {
+    width: 1px;
+  }
+
+  .editor-area.horizontal > .editor-divider {
+    height: 1px;
+  }
+
   .editor {
     flex: 1;
     min-height: 0;
+    min-width: 0;
   }
 
   /* CodeMirror はテーマ拡張を持たせず、CSS 変数だけで両テーマに追従させる */
