@@ -23,6 +23,8 @@ import {
   search,
   searchKeymap,
 } from "@codemirror/search";
+import { bracketMatching } from "@codemirror/language";
+import { markdownExtension } from "./markdown";
 
 /**
  * 行の折り返しは実行中に切り替えるため Compartment 経由で再設定する。
@@ -30,17 +32,27 @@ import {
  */
 export const wrapCompartment = new Compartment();
 
+/** Markdown のライブ装飾は、名前を付けて保存で拡張子が変わった時にも
+ *  再設定できるよう Compartment 経由にする。 */
+export const markdownCompartment = new Compartment();
+
 /**
  * プレーンテキスト編集に必要な拡張のみを列挙する。
  * codemirror パッケージの basicSetup は自動補完・lint・コード折りたたみを
  * 含むため、軽量化のため採用していない。
  */
-function extensions(wrap: boolean, onUpdate: (update: ViewUpdate) => void): Extension[] {
+function extensions(
+  wrap: boolean,
+  isMarkdown: boolean,
+  onUpdate: (update: ViewUpdate) => void,
+): Extension[] {
   return [
     lineNumbers(),
     highlightActiveLineGutter(),
     highlightActiveLine(),
     highlightSpecialChars(),
+    // VS Code のように対応する括弧を強調表示する
+    bracketMatching(),
     history(),
     drawSelection(),
     dropCursor(),
@@ -55,6 +67,7 @@ function extensions(wrap: boolean, onUpdate: (update: ViewUpdate) => void): Exte
       indentWithTab,
     ]),
     wrapCompartment.of(wrap ? EditorView.lineWrapping : []),
+    markdownCompartment.of(markdownExtension(isMarkdown)),
     EditorView.updateListener.of((update) => {
       // setState によるタブ切り替えでは transactions が空になるため除外する
       if (update.transactions.length > 0) onUpdate(update);
@@ -65,7 +78,8 @@ function extensions(wrap: boolean, onUpdate: (update: ViewUpdate) => void): Exte
 export function createEditorState(
   doc: string,
   wrap: boolean,
+  isMarkdown: boolean,
   onUpdate: (update: ViewUpdate) => void,
 ): EditorState {
-  return EditorState.create({ doc, extensions: extensions(wrap, onUpdate) });
+  return EditorState.create({ doc, extensions: extensions(wrap, isMarkdown, onUpdate) });
 }

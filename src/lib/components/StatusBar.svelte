@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ZOOM_PRESETS, type Eol } from "$lib/workspace.svelte";
+  import { ENCODINGS, EOLS, ZOOM_PRESETS, type Eol, type TextEncoding } from "$lib/workspace.svelte";
 
   let {
     line,
@@ -8,6 +8,9 @@
     lines,
     chars,
     eol,
+    encoding,
+    onsetencoding,
+    onseteol,
     wrap,
     ontogglewrap,
     zoom,
@@ -19,6 +22,9 @@
     lines: number;
     chars: number;
     eol: Eol;
+    encoding: TextEncoding;
+    onsetencoding: (encoding: TextEncoding) => void;
+    onseteol: (eol: Eol) => void;
     wrap: boolean;
     ontogglewrap: () => void;
     zoom: number;
@@ -26,8 +32,12 @@
   } = $props();
 
   let zoomOpen = $state(false);
+  let encodingOpen = $state(false);
+  let eolOpen = $state(false);
   let customValue = $state("");
   let wrapper: HTMLDivElement | undefined = $state();
+  let encodingWrapper: HTMLDivElement | undefined = $state();
+  let eolWrapper: HTMLDivElement | undefined = $state();
   let customInput: HTMLInputElement | undefined = $state();
 
   $effect(() => {
@@ -64,10 +74,23 @@
     }
   }
 
+  function selectEncoding(value: TextEncoding) {
+    onsetencoding(value);
+    encodingOpen = false;
+  }
+
+  function selectEol(value: Eol) {
+    onseteol(value);
+    eolOpen = false;
+  }
+
   function handleWindowClick(event: MouseEvent) {
-    if (zoomOpen && wrapper && !wrapper.contains(event.target as Node)) {
-      zoomOpen = false;
+    const target = event.target as Node;
+    if (zoomOpen && wrapper && !wrapper.contains(target)) zoomOpen = false;
+    if (encodingOpen && encodingWrapper && !encodingWrapper.contains(target)) {
+      encodingOpen = false;
     }
+    if (eolOpen && eolWrapper && !eolWrapper.contains(target)) eolOpen = false;
   }
 </script>
 
@@ -128,8 +151,59 @@
       </div>
     {/if}
   </div>
-  <span>{eol}</span>
-  <span>UTF-8</span>
+  <div class="menu-wrap" bind:this={eolWrapper}>
+    <button
+      type="button"
+      class="toggle"
+      aria-haspopup="true"
+      aria-expanded={eolOpen}
+      title="改行コードを変更"
+      onclick={() => (eolOpen = !eolOpen)}
+    >
+      {eol}
+    </button>
+    {#if eolOpen}
+      <div class="picker-menu">
+        {#each EOLS as option (option)}
+          <button
+            type="button"
+            class="picker-item"
+            class:active={option === eol}
+            onclick={() => selectEol(option)}
+          >
+            {option}
+          </button>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  <div class="menu-wrap" bind:this={encodingWrapper}>
+    <button
+      type="button"
+      class="toggle"
+      aria-haspopup="true"
+      aria-expanded={encodingOpen}
+      title="文字コードを変更(保存時に適用されます)"
+      onclick={() => (encodingOpen = !encodingOpen)}
+    >
+      {encoding}
+    </button>
+    {#if encodingOpen}
+      <div class="picker-menu">
+        {#each ENCODINGS as option (option)}
+          <button
+            type="button"
+            class="picker-item"
+            class:active={option === encoding}
+            onclick={() => selectEncoding(option)}
+          >
+            {option}
+          </button>
+        {/each}
+      </div>
+    {/if}
+  </div>
 </footer>
 
 <style>
@@ -236,5 +310,49 @@
     color: var(--fg);
     font: inherit;
     font-variant-numeric: tabular-nums;
+  }
+
+  .menu-wrap {
+    position: relative;
+  }
+
+  .picker-menu {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 0.4em;
+    padding: 0.3em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2em;
+    min-width: 8rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    z-index: 50;
+  }
+
+  .picker-item {
+    padding: 0.35em 0.6em;
+    border: 0;
+    border-radius: 5px;
+    background: none;
+    color: var(--fg);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .picker-item:hover {
+    background: var(--hover);
+  }
+
+  .picker-item.active {
+    background: var(--accent);
+    color: #fff;
   }
 </style>

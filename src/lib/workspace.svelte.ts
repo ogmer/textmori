@@ -1,5 +1,6 @@
 import { EditorState, Text } from "@codemirror/state";
 import { EditorView, type Command, type ViewUpdate } from "@codemirror/view";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   readText as readClipboardText,
@@ -10,10 +11,44 @@ import {
   open as openDialog,
   save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { createEditorState, wrapCompartment } from "./editor";
+import { createEditorState, markdownCompartment, wrapCompartment } from "./editor";
+import { isMarkdownPath, markdownExtension } from "./markdown";
 
 export type Eol = "LF" | "CRLF";
+export const EOLS: Eol[] = ["LF", "CRLF"];
+
+/** サクラエディタ等の日本語テキストエディタと同じく、開いたファイルの文字コードを
+ *  自動判別して保持し、保存時も同じ文字コードで書き戻す。ステータスバーから手動でも変更できる。 */
+export type TextEncoding = "UTF-8" | "Shift_JIS" | "EUC-JP" | "UTF-16LE" | "UTF-16BE";
+export const ENCODINGS: TextEncoding[] = [
+  "UTF-8",
+  "Shift_JIS",
+  "EUC-JP",
+  "UTF-16LE",
+  "UTF-16BE",
+];
+export const DEFAULT_ENCODING: TextEncoding = "UTF-8";
+
+interface DecodedFile {
+  content: string;
+  encoding: TextEncoding;
+}
+
+async function readTextFileDetect(path: string): Promise<DecodedFile> {
+  return invoke<DecodedFile>("read_text_file_detect", { path });
+}
+
+function isTextEncoding(value: unknown): value is TextEncoding {
+  return ENCODINGS.includes(value as TextEncoding);
+}
+
+async function writeTextFileEncoded(
+  path: string,
+  content: string,
+  encoding: TextEncoding,
+): Promise<void> {
+  await invoke("write_text_file_encoded", { path, content, encoding });
+}
 
 const UNTITLED = "無題";
 /** タブ名に使う 1 行目テキストの最大文字数 */
@@ -29,6 +64,7 @@ interface PersistedTab {
   content: string;
   savedContent: string;
   eol: Eol;
+  encoding: TextEncoding;
 }
 
 interface PersistedSession {
@@ -66,15 +102,22 @@ export class Tab {
   readonly id: string;
   path = $state<string | null>(null);
   eol = $state<Eol>("LF");
+  encoding = $state<TextEncoding>(DEFAULT_ENCODING);
   editorState = $state.raw(EditorState.create());
   savedDoc = $state.raw(Text.empty);
 
-  constructor(state: EditorState, path: string | null = null, eol: Eol = "LF") {
+  constructor(
+    state: EditorState,
+    path: string | null = null,
+    eol: Eol = "LF",
+    encoding: TextEncoding = DEFAULT_ENCODING,
+  ) {
     this.id = `tab-${++counter}`;
     this.editorState = state;
     this.savedDoc = state.doc;
     this.path = path;
     this.eol = eol;
+    this.encoding = encoding;
   }
 
   /** 保存済みならファイル名、未保存なら 1 行目のテキストをタブ名にする(メモ帳と同じ挙動) */
@@ -155,16 +198,16 @@ export class Workspace {
         this.#activate(opened);
         continue;
       }
-      const content = await readTextFile(path);
+      const { content, encoding } = await readTextFileDetect(path);
       const eol: Eol = content.includes("\r\n") ? "CRLF" : "LF";
-      this.#addTab(new Tab(this.#createState(content), path, eol));
+      this.#addTab(new Tab(this.#createState(content, path), path, eol, encoding));
     }
   }
 
   async save(target: Tab | null = this.active): Promise<void> {
     if (!target) return;
     if (!target.path) return this.saveAs(target);
-    await writeTextFile(target.path, target.serialized);
+    await writeTextFileEncoded(target.path, target.serialized, target.encoding);
     target.savedDoc = target.editorState.doc;
     this.#persistNow();
   }
@@ -176,9 +219,15 @@ export class Workspace {
       filters: FILTERS,
     });
     if (!path) return;
-    await writeTextFile(path, target.serialized);
+    await writeTextFileEncoded(path, target.serialized, target.encoding);
     target.path = path;
     target.savedDoc = target.editorState.doc;
+    // 拡張子が変わって Markdown になった/でなくなった場合に備えて装飾を再設定する
+    if (this.activeId === target.id) {
+      this.#view?.dispatch({
+        effects: markdownCompartment.reconfigure(markdownExtension(isMarkdownPath(path))),
+      });
+    }
     this.#persistNow();
   }
 
@@ -227,6 +276,20 @@ export class Workspace {
   toggleWrap(): void {
     this.wrap = !this.wrap;
     this.#applyWrap();
+    this.#persistNow();
+  }
+
+  /** 保存時に使う文字コードを変更する。次に保存するまでファイル自体は変わらない。 */
+  setEncoding(encoding: TextEncoding, target: Tab | null = this.active): void {
+    if (!target) return;
+    target.encoding = encoding;
+    this.#persistNow();
+  }
+
+  /** 保存時に使う改行コードを変更する。次に保存するまでファイル自体は変わらない。 */
+  setEol(eol: Eol, target: Tab | null = this.active): void {
+    if (!target) return;
+    target.eol = eol;
     this.#persistNow();
   }
 
@@ -296,8 +359,8 @@ export class Workspace {
     this.focus();
   }
 
-  #createState(doc: string): EditorState {
-    return createEditorState(doc, this.wrap, this.#onUpdate);
+  #createState(doc: string, path: string | null = null): EditorState {
+    return createEditorState(doc, this.wrap, isMarkdownPath(path), this.#onUpdate);
   }
 
   /** エディタの変更を常にアクティブなタブへ書き戻し、派生状態を最新に保つ */
@@ -358,6 +421,7 @@ export class Workspace {
           content: tab.editorState.doc.toString(),
           savedContent: tab.savedDoc.toString(),
           eol: tab.eol,
+          encoding: tab.encoding,
         })),
         activeIndex: Math.max(
           0,
@@ -387,9 +451,10 @@ export class Workspace {
 
       const tabs = data.tabs.map((t) => {
         const tab = new Tab(
-          this.#createState(String(t.content ?? "")),
+          this.#createState(String(t.content ?? ""), t.path ?? null),
           t.path ?? null,
           t.eol === "CRLF" ? "CRLF" : "LF",
+          isTextEncoding(t.encoding) ? t.encoding : DEFAULT_ENCODING,
         );
         tab.savedDoc = EditorState.create({
           doc: String(t.savedContent ?? t.content ?? ""),

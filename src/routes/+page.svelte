@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { redo, selectAll, undo } from "@codemirror/commands";
-  import { openSearchPanel, replaceAll } from "@codemirror/search";
+  import { openSearchPanel } from "@codemirror/search";
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -10,7 +10,7 @@
   import StatusBar from "$lib/components/StatusBar.svelte";
   import TabBar from "$lib/components/TabBar.svelte";
   import TitleBar from "$lib/components/TitleBar.svelte";
-  import { settings } from "$lib/settings.svelte";
+  import { config } from "$lib/config.svelte";
   import { checkForUpdates } from "$lib/updater";
   import { BASE_FONT_SIZE, DEFAULT_ZOOM, workspace } from "$lib/workspace.svelte";
 
@@ -20,6 +20,13 @@
   const status = $derived(workspace.status);
   // macOS はメニューが画面上部のネイティブメニューに出るため HTML 側では描画しない
   const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
+
+  const FALLBACK_MONO =
+    '"Cascadia Mono", Consolas, "Noto Sans Mono", "Hiragino Sans", monospace';
+  const editorStyle = $derived(
+    `--editor-font-size: ${(BASE_FONT_SIZE * workspace.zoom) / 100}px;` +
+      (config.fontFamily ? ` --font-mono: "${config.fontFamily}", ${FALLBACK_MONO};` : ""),
+  );
 
   const appWindow = getCurrentWindow();
 
@@ -184,7 +191,15 @@
   onMount(() => {
     const detachEditor = workspace.attach(host);
 
-    if (settings.autoUpdateEnabled) checkForUpdates(true);
+    // 設定ファイルの読み込み・監視は起動直後の描画を邪魔しないよう後回しにする
+    config.load();
+
+    // アップデート確認はネットワーク I/O を伴うため、起動直後の描画や
+    // タイピング開始を妨げないよう少し遅らせてから行う(Ghostty の
+    // 「起動を軽く保つ」考え方に倣う)。
+    const updateCheckTimer = setTimeout(() => {
+      if (config.autoUpdate) checkForUpdates(true);
+    }, 1500);
 
     const menuAction = listen<string>("menu-action", (event) =>
       handleMenuAction(event.payload),
@@ -201,6 +216,7 @@
     window.addEventListener("keydown", handleKeydown);
     return () => {
       window.removeEventListener("keydown", handleKeydown);
+      clearTimeout(updateCheckTimer);
       menuAction.then((unlisten) => unlisten());
       dragDrop.then((unlisten) => unlisten());
       detachEditor();
@@ -208,10 +224,7 @@
   });
 </script>
 
-<div
-  class="app"
-  style="--editor-font-size: {(BASE_FONT_SIZE * workspace.zoom) / 100}px"
->
+<div class="app" style={editorStyle}>
   {#if settingsOpen}
     <SettingsPanel onclose={() => (settingsOpen = false)} />
   {/if}
@@ -245,6 +258,15 @@
     lines={status.lines}
     chars={status.chars}
     eol={workspace.active?.eol ?? "LF"}
+    encoding={workspace.active?.encoding ?? "UTF-8"}
+    onsetencoding={(value) => {
+      workspace.setEncoding(value);
+      workspace.focus();
+    }}
+    onseteol={(value) => {
+      workspace.setEol(value);
+      workspace.focus();
+    }}
     wrap={workspace.wrap}
     ontogglewrap={() => {
       workspace.toggleWrap();
@@ -269,7 +291,7 @@
     --border: #d4d4d4;
     --hover: rgba(0, 0, 0, 0.07);
     --accent: #3b74d8;
-    --active-line: rgba(0, 0, 0, 0.04);
+    --active-line: rgba(0, 0, 0, 0.055);
     --selection: #b9d4f6;
     --match: rgba(59, 116, 216, 0.18);
     --match-active: rgba(59, 116, 216, 0.38);
@@ -290,7 +312,7 @@
       --border: #3a3a3a;
       --hover: rgba(255, 255, 255, 0.09);
       --accent: #5b9bff;
-      --active-line: rgba(255, 255, 255, 0.05);
+      --active-line: rgba(255, 255, 255, 0.08);
       --selection: #2c4f7c;
       --match: rgba(91, 155, 255, 0.2);
       --match-active: rgba(91, 155, 255, 0.4);
@@ -349,8 +371,18 @@
     background: var(--active-line);
   }
 
+  /* VS Code のように、現在行の行番号だけ太字・明色にして目立たせる */
   .editor :global(.cm-activeLineGutter) {
     color: var(--fg);
+    font-weight: 600;
+  }
+
+  /* VS Code のように対応する括弧を枠線で強調する */
+  .editor :global(.cm-matchingBracket),
+  .editor :global(.cm-nonmatchingBracket) {
+    background: transparent;
+    outline: 1px solid var(--accent);
+    border-radius: 2px;
   }
 
   .editor :global(.cm-cursor),

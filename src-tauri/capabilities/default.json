@@ -18,12 +18,8 @@
     "process:allow-restart",
     "fs:default",
     {
-      "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "**" }]
-    },
-    {
-      "identifier": "fs:allow-write-text-file",
-      "allow": [{ "path": "**" }]
+      "identifier": "fs:allow-watch",
+      "allow": [{ "path": "$APPCONFIG/**" }]
     }
   ]
 }

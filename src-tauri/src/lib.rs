@@ -1,5 +1,8 @@
 use tauri::Manager;
 
+mod config;
+mod encoding;
+
 #[cfg(target_os = "macos")]
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 #[cfg(target_os = "macos")]
@@ -90,6 +93,13 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            encoding::read_text_file_detect,
+            encoding::write_text_file_encoded,
+            config::read_config,
+            config::write_config,
+            config::config_file_path,
+        ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {

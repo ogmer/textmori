@@ -47,27 +47,34 @@
 <style>
   .tabbar {
     display: flex;
-    align-items: stretch;
+    align-items: center;
+    gap: 0.3em;
     min-width: 0;
+    padding: 0.3em 0.3em 0;
     overflow-x: auto;
     background: var(--tabbar-bg);
     scrollbar-width: thin;
   }
 
+  /* macOS のタブ(Safari 等)のように角丸で1枚ずつ独立させる */
   .tab {
     display: flex;
     align-items: center;
     flex: 0 0 auto;
     max-width: 15rem;
-    border-right: 1px solid var(--border);
-    background: var(--tab-bg);
+    border-radius: 7px 7px 0 0;
+    background: transparent;
     color: var(--muted);
+  }
+
+  .tab:hover {
+    background: var(--hover);
   }
 
   .tab.active {
     background: var(--bg);
     color: var(--fg);
-    box-shadow: inset 0 2px 0 var(--accent);
+    box-shadow: none;
   }
 
   .label {
