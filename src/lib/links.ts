@@ -16,8 +16,7 @@ const urlMatcher = new MatchDecorator({
   decoration: () => Decoration.mark({ class: "cm-url-link" }),
 });
 
-/** URL をハイライトする ViewPlugin。装飾自体は常時付与し、下線表示は
- *  Ctrl/Cmd を押している間だけ CSS 側(:global(html.mod-key))で行う。 */
+/** URL を常に下線でハイライトする ViewPlugin。 */
 export const urlHighlighter = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
@@ -25,7 +24,11 @@ export const urlHighlighter = ViewPlugin.fromClass(
       this.decorations = urlMatcher.createDeco(view);
     }
     update(update: ViewUpdate) {
-      this.decorations = urlMatcher.updateDeco(update, this.decorations);
+      // updateDeco の差分更新だと、Backspace で URL でなくなった後も
+      // 下線が残ってしまうことがあるため、変更時は常に再計算する。
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = urlMatcher.createDeco(update.view);
+      }
     }
   },
   {
@@ -33,8 +36,40 @@ export const urlHighlighter = ViewPlugin.fromClass(
   },
 );
 
-function urlAtPos(view: EditorView, pos: number): string | null {
+/**
+ * クリック位置に URL があれば、そのテキストを返す。
+ * posAtCoords() は行内で一番近い文字位置を返すだけなので、URL より右側の
+ * 余白をクリックしても(行末に近い位置として)一致してしまう。実際のクリック
+ * 座標が、解決された文字位置からどれだけ離れているかで空白部分を弾く。
+ */
+function urlAtEventPos(view: EditorView, event: MouseEvent): string | null {
+  const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+  if (pos == null) return null;
+
+  const hitCoords = view.coordsAtPos(pos);
+  if (!hitCoords || event.clientY < hitCoords.top || event.clientY > hitCoords.bottom) {
+    view.dispatch({
+      changes: {
+        from: view.state.doc.length,
+        insert: `\n[DBG2 no-hitCoords pos=${pos} hit=${JSON.stringify(hitCoords)}]`,
+      },
+    });
+    return null;
+  }
   const line = view.state.doc.lineAt(pos);
+  const neighborPos = pos > line.from ? pos - 1 : Math.min(pos + 1, line.to);
+  const neighborCoords = pos !== neighborPos ? view.coordsAtPos(neighborPos) : null;
+  const charWidth = neighborCoords ? Math.abs(hitCoords.left - neighborCoords.left) : 0;
+  const tolerance = Math.max(charWidth, 6);
+  const dx = Math.abs(event.clientX - hitCoords.left);
+  view.dispatch({
+    changes: {
+      from: view.state.doc.length,
+      insert: `\n[DBG2 pos=${pos} hitLeft=${hitCoords.left} clientX=${event.clientX} dx=${dx} tol=${tolerance}]`,
+    },
+  });
+  if (dx > tolerance) return null;
+
   const offset = pos - line.from;
   const pattern = new RegExp(URL_PATTERN.source, "g");
   let match: RegExpExecArray | null;
@@ -47,13 +82,15 @@ function urlAtPos(view: EditorView, pos: number): string | null {
   return null;
 }
 
-/** URL をクリックすると、デフォルトブラウザで開く(Ctrl/Cmd 不要)。 */
+/** Ctrl/Cmd+クリックで、押した位置の URL をデフォルトブラウザで開く。 */
 export const urlClickHandler = EditorView.domEventHandlers({
   mousedown(event, view) {
-    if (event.button !== 0) return false;
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-    if (pos == null) return false;
-    const url = urlAtPos(view, pos);
+    const debugLine = `[DEBUG ctrl=${event.ctrlKey} meta=${event.metaKey} btn=${event.button}]`;
+    if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
+    const url = urlAtEventPos(view, event);
+    view.dispatch({
+      changes: { from: view.state.doc.length, insert: `\n${debugLine} url=${url}` },
+    });
     if (!url) return false;
     event.preventDefault();
     openUrl(url).catch(() => {});

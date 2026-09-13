@@ -6,6 +6,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import MenuBar, { type MenuDefinition } from "$lib/components/MenuBar.svelte";
+  import SaveConfirmDialog from "$lib/components/SaveConfirmDialog.svelte";
   import SettingsPanel from "$lib/components/SettingsPanel.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
   import TabBar from "$lib/components/TabBar.svelte";
@@ -317,9 +318,23 @@
     // 未保存の内容も含めて常にセッションへ保存しているため、終了時に
     // 確認ダイアログは出さない(次回起動時に自動で復元される)。
 
+    // VS Code のように、Ctrl/Cmd を押している間だけ URL 上のカーソルをポインタにする
+    const updateModKey = (event: KeyboardEvent | MouseEvent) => {
+      document.documentElement.classList.toggle("mod-key", event.ctrlKey || event.metaKey);
+    };
+    const clearModKey = () => document.documentElement.classList.remove("mod-key");
+    window.addEventListener("keydown", updateModKey);
+    window.addEventListener("keyup", updateModKey);
+    window.addEventListener("mousemove", updateModKey);
+    window.addEventListener("blur", clearModKey);
+
     window.addEventListener("keydown", handleKeydown);
     return () => {
       window.removeEventListener("keydown", handleKeydown);
+      window.removeEventListener("keydown", updateModKey);
+      window.removeEventListener("keyup", updateModKey);
+      window.removeEventListener("mousemove", updateModKey);
+      window.removeEventListener("blur", clearModKey);
       menuAction.then((unlisten) => unlisten());
       dragDrop.then((unlisten) => unlisten());
       detachEditor();
@@ -337,6 +352,13 @@
 <div class="app" style={editorStyle}>
   {#if settingsOpen}
     <SettingsPanel onclose={() => (settingsOpen = false)} />
+  {/if}
+
+  {#if workspace.pendingClose}
+    <SaveConfirmDialog
+      name={workspace.pendingClose.name}
+      onchoice={(choice) => workspace.resolvePendingClose(choice)}
+    />
   {/if}
 
   {#if isMac}
@@ -407,7 +429,7 @@
     --border: #d4d4d4;
     --hover: rgba(0, 0, 0, 0.07);
     --accent: #3b74d8;
-    --active-line: rgba(0, 0, 0, 0.055);
+    --active-line-border: rgba(0, 0, 0, 0.12);
     --selection: #b9d4f6;
     --match: rgba(59, 116, 216, 0.18);
     --match-active: rgba(59, 116, 216, 0.38);
@@ -432,8 +454,8 @@
       --border: #3a3a3a;
       --hover: rgba(255, 255, 255, 0.09);
       --accent: #5b9bff;
-      --active-line: rgba(255, 255, 255, 0.08);
-      --selection: #2c4f7c;
+      --active-line-border: rgba(255, 255, 255, 0.18);
+      --selection: rgba(38, 53, 105, 0.85);
       --match: rgba(91, 155, 255, 0.2);
       --match-active: rgba(91, 155, 255, 0.4);
       --scrollbar-thumb: rgba(150, 150, 150, 0.35);
@@ -452,8 +474,8 @@
     --border: #3a3a3a;
     --hover: rgba(255, 255, 255, 0.09);
     --accent: #5b9bff;
-    --active-line: rgba(255, 255, 255, 0.08);
-    --selection: #2c4f7c;
+    --active-line-border: rgba(255, 255, 255, 0.18);
+    --selection: rgba(38, 53, 105, 0.85);
     --match: rgba(91, 155, 255, 0.2);
     --match-active: rgba(91, 155, 255, 0.4);
     --scrollbar-thumb: rgba(255, 255, 255, 0.2);
@@ -559,36 +581,41 @@
     line-height: 1.6;
   }
 
+  /* drawSelection() を使っていないためカーソルもブラウザネイティブの
+     キャレットで表示される。既定色だとダークモードで見えにくいことがあるため
+     テーマの文字色に合わせて明示的に指定する。 */
+  .editor :global(.cm-content) {
+    caret-color: var(--fg);
+  }
+
+  /* VS Code のように、アクティブ行は塗りつぶしではなく上下の罫線で強調する */
   .editor :global(.cm-activeLine) {
-    background: var(--active-line);
-  }
-
-  /* VS Code のように対応する括弧を枠線で強調する */
-  .editor :global(.cm-matchingBracket),
-  .editor :global(.cm-nonmatchingBracket) {
     background: transparent;
-    outline: 1px solid var(--accent);
-    border-radius: 2px;
+    box-shadow:
+      inset 0 1px 0 0 var(--active-line-border),
+      inset 0 -1px 0 0 var(--active-line-border);
   }
 
-  /* URL には常に下線を表示し、クリックで開けることが分かるようポインタカーソルにする。 */
+  /* URL には常に下線を表示し、Ctrl/Cmd を押している間だけ
+     クリックで開けることが分かるようポインタカーソルにする。 */
   .editor :global(.cm-url-link) {
     text-decoration: underline;
+  }
+
+  :global(html.mod-key) .editor :global(.cm-url-link) {
     cursor: pointer;
   }
 
-  .editor :global(.cm-cursor),
   .editor :global(.cm-dropCursor) {
     border-left-color: var(--fg);
   }
 
-  .editor :global(.cm-selectionBackground),
-  .editor :global(.cm-focused .cm-selectionBackground),
+  /* drawSelection() を使っていないため、選択はブラウザネイティブの
+     ::selection(文字の部分だけ色が付く)で表示する */
   .editor :global(.cm-content ::selection) {
     background: var(--selection);
   }
 
-  .editor :global(.cm-selectionMatch),
   .editor :global(.cm-searchMatch) {
     background: var(--match);
   }

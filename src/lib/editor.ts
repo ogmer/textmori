@@ -2,7 +2,6 @@ import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   EditorView,
   crosshairCursor,
-  drawSelection,
   dropCursor,
   highlightActiveLine,
   highlightSpecialChars,
@@ -16,12 +15,7 @@ import {
   historyKeymap,
   indentWithTab,
 } from "@codemirror/commands";
-import {
-  highlightSelectionMatches,
-  search,
-  searchKeymap,
-} from "@codemirror/search";
-import { bracketMatching } from "@codemirror/language";
+import { search, searchKeymap } from "@codemirror/search";
 import { markdownExtension } from "./markdown";
 import { urlClickHandler, urlHighlighter } from "./links";
 
@@ -48,15 +42,13 @@ function extensions(
   return [
     highlightActiveLine(),
     highlightSpecialChars(),
-    // VS Code のように対応する括弧を強調表示する
-    bracketMatching(),
     history(),
-    drawSelection(),
+    // drawSelection() は行全体の幅で選択背景を描画してしまうため使わず、
+    // ブラウザネイティブの選択(::selection、文字の部分だけ色が付く)に任せる
     dropCursor(),
     rectangularSelection(),
     crosshairCursor(),
     search({ top: true }),
-    highlightSelectionMatches(),
     // VS Code のように Ctrl/Cmd+クリックで URL をブラウザで開けるようにする
     urlHighlighter,
     urlClickHandler,

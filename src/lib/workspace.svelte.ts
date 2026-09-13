@@ -7,7 +7,6 @@ import {
   writeText as writeClipboardText,
 } from "@tauri-apps/plugin-clipboard-manager";
 import {
-  confirm,
   message,
   open as openDialog,
   save as saveDialog,
@@ -55,6 +54,9 @@ async function writeTextFileEncoded(
 const UNTITLED = "タイトルなし";
 /** タブ名に使う 1 行目テキストの最大文字数 */
 const TAB_NAME_MAX_LENGTH = 24;
+
+/** メモ帳のように、閉じる時に「保存 / 保存しない / キャンセル」を選ばせる */
+export type CloseChoice = "save" | "discard" | "cancel";
 
 /** セッション(タブの内容・折り返し・ズーム)の保存先キー */
 const SESSION_KEY = "textmori:session";
@@ -154,9 +156,19 @@ export class Workspace {
    *  内容は同期しつつスクロール位置・カーソルは独立させる。 */
   splitOpen = $state(false);
   splitDirection = $state<SplitDirection>("vertical");
+  /** メモ帳のような保存確認ダイアログを表示中のタブ情報(null なら非表示) */
+  pendingClose = $state<{ name: string } | null>(null);
   #view: EditorView | null = null;
   #splitView: EditorView | null = null;
   #syncingSplit = false;
+  #pendingCloseResolve: ((choice: CloseChoice) => void) | null = null;
+
+  /** 保存確認ダイアログの選択結果を伝える(ダイアログ側の UI から呼ぶ) */
+  resolvePendingClose(choice: CloseChoice): void {
+    this.#pendingCloseResolve?.(choice);
+    this.#pendingCloseResolve = null;
+    this.pendingClose = null;
+  }
 
   get active(): Tab | null {
     return this.tabs.find((tab) => tab.id === this.activeId) ?? null;
@@ -244,21 +256,22 @@ export class Workspace {
     }
   }
 
-  async save(target: Tab | null = this.active): Promise<void> {
-    if (!target) return;
+  async save(target: Tab | null = this.active): Promise<boolean> {
+    if (!target) return false;
     if (!target.path) return this.saveAs(target);
     await writeTextFileEncoded(target.path, target.serialized, target.encoding);
     target.savedDoc = target.editorState.doc;
     this.#persistNow();
+    return true;
   }
 
-  async saveAs(target: Tab | null = this.active): Promise<void> {
-    if (!target) return;
+  async saveAs(target: Tab | null = this.active): Promise<boolean> {
+    if (!target) return false;
     const path = await saveDialog({
       defaultPath: target.path ?? `${UNTITLED}.txt`,
       filters: FILTERS,
     });
-    if (!path) return;
+    if (!path) return false;
     await writeTextFileEncoded(path, target.serialized, target.encoding);
     target.path = path;
     target.savedDoc = target.editorState.doc;
@@ -269,6 +282,7 @@ export class Workspace {
       this.#splitView?.dispatch({ effects });
     }
     this.#persistNow();
+    return true;
   }
 
   async closeTab(id: string): Promise<void> {
@@ -276,11 +290,15 @@ export class Workspace {
     if (index < 0) return;
     const tab = this.tabs[index];
     if (tab.dirty) {
-      const discard = await confirm(
-        `「${tab.name}」の変更は保存されていません。閉じてよろしいですか?`,
-        { title: "textmori", kind: "warning" },
-      );
-      if (!discard) return;
+      const choice = await new Promise<CloseChoice>((resolve) => {
+        this.#pendingCloseResolve = resolve;
+        this.pendingClose = { name: tab.name };
+      });
+      if (choice === "cancel") return;
+      if (choice === "save") {
+        const saved = await this.save(tab);
+        if (!saved) return;
+      }
     }
     this.tabs.splice(index, 1);
     if (this.tabs.length === 0) {
