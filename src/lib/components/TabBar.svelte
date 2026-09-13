@@ -48,21 +48,22 @@
   .tabbar {
     display: flex;
     align-items: center;
-    gap: 0.3em;
+    gap: 0.35em;
     min-width: 0;
-    padding: 0.3em 0.3em 0;
+    padding: 0.32em 0.4em 0;
     overflow-x: auto;
     background: var(--tabbar-bg);
     scrollbar-width: thin;
   }
 
-  /* macOS のタブ(Safari 等)のように角丸で1枚ずつ独立させる */
+  /* メモ帳のように、1枚あたりの縦横の余白を広めに取った角丸タブにする */
   .tab {
     display: flex;
     align-items: center;
     flex: 0 0 auto;
-    max-width: 15rem;
-    border-radius: 7px 7px 0 0;
+    min-width: 14rem;
+    max-width: 25rem;
+    border-radius: 8px 8px 0 0;
     background: transparent;
     color: var(--muted);
   }
@@ -80,14 +81,15 @@
   .label {
     display: flex;
     align-items: center;
-    gap: 0.35em;
+    gap: 0.4em;
+    flex: 1;
     min-width: 0;
-    padding: 0.45em 0.3em 0.45em 0.75em;
+    padding: 0.58em 0.4em 0.58em 1em;
     border: 0;
     background: none;
     color: inherit;
     font: inherit;
-    font-size: 0.82rem;
+    font-size: 0.88rem;
     cursor: pointer;
   }
 
@@ -109,12 +111,12 @@
   }
 
   .close {
-    padding: 0 0.55em;
+    padding: 0 0.75em;
     align-self: stretch;
     border: 0;
     background: none;
     color: var(--muted);
-    font-size: 1rem;
+    font-size: 1.1rem;
     line-height: 1;
     cursor: pointer;
     opacity: 0;
@@ -132,12 +134,12 @@
 
   .add {
     flex: 0 0 auto;
-    width: 2.2em;
+    width: 2.6em;
     align-self: stretch;
     border: 0;
     background: none;
     color: var(--muted);
-    font-size: 1rem;
+    font-size: 1.1rem;
     line-height: 1;
     cursor: pointer;
   }

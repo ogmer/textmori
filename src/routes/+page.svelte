@@ -559,21 +559,8 @@
     line-height: 1.6;
   }
 
-  .editor :global(.cm-gutters) {
-    background: var(--bg);
-    color: var(--muted);
-    border-right: 1px solid var(--border);
-  }
-
-  .editor :global(.cm-activeLine),
-  .editor :global(.cm-activeLineGutter) {
+  .editor :global(.cm-activeLine) {
     background: var(--active-line);
-  }
-
-  /* VS Code のように、現在行の行番号だけ太字・明色にして目立たせる */
-  .editor :global(.cm-activeLineGutter) {
-    color: var(--fg);
-    font-weight: 600;
   }
 
   /* VS Code のように対応する括弧を枠線で強調する */
@@ -582,6 +569,12 @@
     background: transparent;
     outline: 1px solid var(--accent);
     border-radius: 2px;
+  }
+
+  /* URL には常に下線を表示し、クリックで開けることが分かるようポインタカーソルにする。 */
+  .editor :global(.cm-url-link) {
+    text-decoration: underline;
+    cursor: pointer;
   }
 
   .editor :global(.cm-cursor),

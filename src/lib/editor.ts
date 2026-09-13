@@ -5,10 +5,8 @@ import {
   drawSelection,
   dropCursor,
   highlightActiveLine,
-  highlightActiveLineGutter,
   highlightSpecialChars,
   keymap,
-  lineNumbers,
   rectangularSelection,
   type ViewUpdate,
 } from "@codemirror/view";
@@ -25,6 +23,7 @@ import {
 } from "@codemirror/search";
 import { bracketMatching } from "@codemirror/language";
 import { markdownExtension } from "./markdown";
+import { urlClickHandler, urlHighlighter } from "./links";
 
 /**
  * 行の折り返しは実行中に切り替えるため Compartment 経由で再設定する。
@@ -47,8 +46,6 @@ function extensions(
   onUpdate: (update: ViewUpdate) => void,
 ): Extension[] {
   return [
-    lineNumbers(),
-    highlightActiveLineGutter(),
     highlightActiveLine(),
     highlightSpecialChars(),
     // VS Code のように対応する括弧を強調表示する
@@ -60,6 +57,9 @@ function extensions(
     crosshairCursor(),
     search({ top: true }),
     highlightSelectionMatches(),
+    // VS Code のように Ctrl/Cmd+クリックで URL をブラウザで開けるようにする
+    urlHighlighter,
+    urlClickHandler,
     keymap.of([
       ...defaultKeymap,
       ...historyKeymap,

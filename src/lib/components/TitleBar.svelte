@@ -24,7 +24,7 @@
      最小化/最大化/閉じる)に合わせ、macOS のトラフィックライトは使わない。 -->
 <header class="titlebar" data-tauri-drag-region>
   <div class="brand" data-tauri-drag-region>
-    <span class="icon" aria-hidden="true">📝</span>
+    <img class="icon" src="/app-icon.png" alt="" aria-hidden="true" />
     <span class="name">textmori</span>
   </div>
 
@@ -81,15 +81,9 @@
   }
 
   .brand .icon {
-    font-size: 0.95rem;
-  }
-
-  /* 絵文字アイコンは字面が上寄り・大きめに見えるため、テキストを少し
-     右下にずらして視覚的な中心をアイコンに合わせる */
-  .brand .name {
-    position: relative;
-    top: 0.1em;
-    left: 0.05em;
+    width: 1rem;
+    height: 1rem;
+    display: block;
   }
 
   .drag {

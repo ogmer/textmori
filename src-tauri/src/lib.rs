@@ -97,6 +97,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(
             // ウィンドウの位置・サイズ・最大化状態を自動的に保存し、次回起動時に復元する。
             // 装飾(decorations)は自前で管理しているため対象から外す。
