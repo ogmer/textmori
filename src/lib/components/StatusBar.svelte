@@ -11,8 +11,6 @@
     encoding,
     onsetencoding,
     onseteol,
-    wrap,
-    ontogglewrap,
     zoom,
     onzoomset,
   }: {
@@ -25,8 +23,6 @@
     encoding: TextEncoding;
     onsetencoding: (encoding: TextEncoding) => void;
     onseteol: (eol: Eol) => void;
-    wrap: boolean;
-    ontogglewrap: () => void;
     zoom: number;
     onzoomset: (percent: number) => void;
   } = $props();
@@ -40,14 +36,13 @@
   let eolWrapper: HTMLDivElement | undefined = $state();
   let customInput: HTMLInputElement | undefined = $state();
 
-  $effect(() => {
-    // メニューを開くたびに現在値を入力欄へ反映する
-    if (zoomOpen) customValue = String(zoom);
-  });
-
   function toggleZoomMenu() {
     zoomOpen = !zoomOpen;
     if (zoomOpen) {
+      // 開いた瞬間の現在値を入力欄へ反映する。入力中に zoom が変わっても
+      // (プリセットクリックやホイール操作)、ここで反応的に上書きすると
+      // 入力中の文字と競合してしまうため、開いた時の一度きりにする。
+      customValue = String(zoom);
       // フォーカス移動後に選択状態にするため次のティックで実行
       setTimeout(() => customInput?.select(), 0);
     }
@@ -58,16 +53,17 @@
     zoomOpen = false;
   }
 
-  function applyCustom() {
+  /** 入力中でも即座に反映する。メニューはユーザーが Enter/確定するまで開いたままにする。 */
+  function applyCustomLive() {
     const value = Number(customValue);
     if (Number.isFinite(value) && value > 0) onzoomset(value);
-    zoomOpen = false;
   }
 
   function handleCustomKeydown(event: KeyboardEvent) {
     if (event.key === "Enter") {
       event.preventDefault();
-      applyCustom();
+      applyCustomLive();
+      zoomOpen = false;
     } else if (event.key === "Escape") {
       event.preventDefault();
       zoomOpen = false;
@@ -101,15 +97,6 @@
   {#if selected > 0}<span>{selected} 文字選択</span>{/if}
   <span class="spacer"></span>
   <span>{lines} 行 / {chars} 文字</span>
-  <button
-    type="button"
-    class="toggle"
-    aria-pressed={wrap}
-    title="行の折り返しを切り替え"
-    onclick={ontogglewrap}
-  >
-    折り返し: {wrap ? "オン" : "オフ"}
-  </button>
   <div class="zoom-wrap" bind:this={wrapper}>
     <button
       type="button"
@@ -144,8 +131,8 @@
             max="500"
             step="1"
             bind:value={customValue}
+            oninput={applyCustomLive}
             onkeydown={handleCustomKeydown}
-            onblur={applyCustom}
           />
         </label>
       </div>

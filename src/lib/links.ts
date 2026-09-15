@@ -41,34 +41,28 @@ export const urlHighlighter = ViewPlugin.fromClass(
  * posAtCoords() は行内で一番近い文字位置を返すだけなので、URL より右側の
  * 余白をクリックしても(行末に近い位置として)一致してしまう。実際のクリック
  * 座標が、解決された文字位置からどれだけ離れているかで空白部分を弾く。
+ * (数ピクセルの誤差は許容し、行の上下境界ギリギリのクリックも拾えるようにする)
  */
 function urlAtEventPos(view: EditorView, event: MouseEvent): string | null {
   const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
   if (pos == null) return null;
 
   const hitCoords = view.coordsAtPos(pos);
-  if (!hitCoords || event.clientY < hitCoords.top || event.clientY > hitCoords.bottom) {
-    view.dispatch({
-      changes: {
-        from: view.state.doc.length,
-        insert: `\n[DBG2 no-hitCoords pos=${pos} hit=${JSON.stringify(hitCoords)}]`,
-      },
-    });
+  if (!hitCoords) return null;
+  const Y_TOLERANCE = 3;
+  if (
+    event.clientY < hitCoords.top - Y_TOLERANCE ||
+    event.clientY > hitCoords.bottom + Y_TOLERANCE
+  ) {
     return null;
   }
+
   const line = view.state.doc.lineAt(pos);
   const neighborPos = pos > line.from ? pos - 1 : Math.min(pos + 1, line.to);
   const neighborCoords = pos !== neighborPos ? view.coordsAtPos(neighborPos) : null;
   const charWidth = neighborCoords ? Math.abs(hitCoords.left - neighborCoords.left) : 0;
   const tolerance = Math.max(charWidth, 6);
-  const dx = Math.abs(event.clientX - hitCoords.left);
-  view.dispatch({
-    changes: {
-      from: view.state.doc.length,
-      insert: `\n[DBG2 pos=${pos} hitLeft=${hitCoords.left} clientX=${event.clientX} dx=${dx} tol=${tolerance}]`,
-    },
-  });
-  if (dx > tolerance) return null;
+  if (Math.abs(event.clientX - hitCoords.left) > tolerance) return null;
 
   const offset = pos - line.from;
   const pattern = new RegExp(URL_PATTERN.source, "g");
@@ -85,12 +79,8 @@ function urlAtEventPos(view: EditorView, event: MouseEvent): string | null {
 /** Ctrl/Cmd+クリックで、押した位置の URL をデフォルトブラウザで開く。 */
 export const urlClickHandler = EditorView.domEventHandlers({
   mousedown(event, view) {
-    const debugLine = `[DEBUG ctrl=${event.ctrlKey} meta=${event.metaKey} btn=${event.button}]`;
     if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
     const url = urlAtEventPos(view, event);
-    view.dispatch({
-      changes: { from: view.state.doc.length, insert: `\n${debugLine} url=${url}` },
-    });
     if (!url) return false;
     event.preventDefault();
     openUrl(url).catch(() => {});

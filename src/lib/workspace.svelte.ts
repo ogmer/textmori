@@ -189,12 +189,22 @@ export class Workspace {
     };
   }
 
+  /** Ctrl/Cmd+ホイールでズームを変更する(VS Code などと同様の操作性)。 */
+  #handleZoomWheel = (event: WheelEvent): void => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    event.preventDefault();
+    if (event.deltaY < 0) this.zoomIn();
+    else if (event.deltaY > 0) this.zoomOut();
+  };
+
   /** エディタを DOM にマウントする。戻り値は破棄用のクリーンアップ関数。 */
   attach(parent: HTMLElement): () => void {
     if (this.tabs.length === 0 && !this.#restoreSession()) this.newTab();
     this.#view = new EditorView({ state: this.active!.editorState, parent });
     this.#view.focus();
+    parent.addEventListener("wheel", this.#handleZoomWheel, { passive: false });
     return () => {
+      parent.removeEventListener("wheel", this.#handleZoomWheel);
       this.#view?.destroy();
       this.#view = null;
     };
@@ -207,7 +217,9 @@ export class Workspace {
       state: tab ? tab.editorState : this.#createState(""),
       parent,
     });
+    parent.addEventListener("wheel", this.#handleZoomWheel, { passive: false });
     return () => {
+      parent.removeEventListener("wheel", this.#handleZoomWheel);
       this.#splitView?.destroy();
       this.#splitView = null;
     };

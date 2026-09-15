@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import TabBar from "./TabBar.svelte";
   import type { Tab } from "$lib/workspace.svelte";
@@ -18,6 +19,19 @@
   } = $props();
 
   const appWindow = getCurrentWindow();
+
+  // 最大化中は「最大化」ではなく「元に戻す」アイコン(重なった四角)を出す
+  let isMaximized = $state(false);
+
+  onMount(() => {
+    appWindow.isMaximized().then((value) => (isMaximized = value));
+    const unlisten = appWindow.onResized(() => {
+      appWindow.isMaximized().then((value) => (isMaximized = value));
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  });
 </script>
 
 <!-- Windows / Linux 用のタイトルバー。ウィンドウ操作はこの OS の作法(右側に
@@ -45,10 +59,10 @@
     <button
       type="button"
       class="control"
-      aria-label="最大化"
+      aria-label={isMaximized ? "元に戻す" : "最大化"}
       onclick={() => appWindow.toggleMaximize()}
     >
-      &#xE922;
+      {#if isMaximized}&#xE923;{:else}&#xE922;{/if}
     </button>
     <button
       type="button"
@@ -91,19 +105,22 @@
     min-width: 1rem;
   }
 
+  /* Windows 標準のタイトルバーと同じく、ボタンは隙間なく等幅で並べる */
   .controls {
     display: flex;
     align-items: stretch;
   }
 
   .control {
-    width: 2.9rem;
+    width: 2.875rem; /* Windows 標準の 46px 相当 */
     border: 0;
     background: none;
     color: var(--fg);
-    /* Windows のウィンドウ操作アイコン用フォント。無い環境では通常フォントで代替される */
-    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", var(--font-ui);
-    font-size: 0.62rem;
+    /* ウィンドウ操作アイコン専用のフォント指定。他の文字に影響しないよう
+       UI フォント(--font-ui)とは切り離し、アイコンフォントだけを使う。 */
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets";
+    font-size: 0.625rem; /* Windows 標準の 10px 相当 */
+    font-weight: 100;
     line-height: 1;
     cursor: pointer;
   }

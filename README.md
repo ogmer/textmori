@@ -36,6 +36,7 @@ Tauri + SvelteKit + CodeMirror 6 で作った軽量テキストエディタ。
 | `Ctrl+F` / `Ctrl+H` | 検索 / 置換 |
 | `Alt+Z` | 行の折り返しを切り替え |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | ズーム 拡大(+10%) / 縮小(-10%) / 100%に戻す |
+| `Ctrl+マウスホイール` | ズーム 拡大 / 縮小 |
 
 macOS では `Ctrl` の代わりに `Cmd`(`Alt+Z` は `Option+Z`)を使う。
 

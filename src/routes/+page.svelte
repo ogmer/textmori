@@ -318,23 +318,9 @@
     // 未保存の内容も含めて常にセッションへ保存しているため、終了時に
     // 確認ダイアログは出さない(次回起動時に自動で復元される)。
 
-    // VS Code のように、Ctrl/Cmd を押している間だけ URL 上のカーソルをポインタにする
-    const updateModKey = (event: KeyboardEvent | MouseEvent) => {
-      document.documentElement.classList.toggle("mod-key", event.ctrlKey || event.metaKey);
-    };
-    const clearModKey = () => document.documentElement.classList.remove("mod-key");
-    window.addEventListener("keydown", updateModKey);
-    window.addEventListener("keyup", updateModKey);
-    window.addEventListener("mousemove", updateModKey);
-    window.addEventListener("blur", clearModKey);
-
     window.addEventListener("keydown", handleKeydown);
     return () => {
       window.removeEventListener("keydown", handleKeydown);
-      window.removeEventListener("keydown", updateModKey);
-      window.removeEventListener("keyup", updateModKey);
-      window.removeEventListener("mousemove", updateModKey);
-      window.removeEventListener("blur", clearModKey);
       menuAction.then((unlisten) => unlisten());
       dragDrop.then((unlisten) => unlisten());
       detachEditor();
@@ -405,11 +391,6 @@
       workspace.setEol(value);
       workspace.focus();
     }}
-    wrap={workspace.wrap}
-    ontogglewrap={() => {
-      workspace.toggleWrap();
-      workspace.focus();
-    }}
     zoom={workspace.zoom}
     onzoomset={(percent) => {
       workspace.setZoom(percent);
@@ -435,7 +416,12 @@
     --match-active: rgba(59, 116, 216, 0.38);
     --scrollbar-thumb: rgba(121, 121, 121, 0.35);
     --scrollbar-thumb-hover: rgba(100, 100, 100, 0.6);
-    --font-ui: "Segoe UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    /* "Meiryo UI" / "Yu Gothic UI" は Segoe UI と視覚的な大きさが揃うよう
+       設計された Windows 標準の日本語 UI フォントのため、Noto Sans JP 等より
+       先に指定し、日本語だけ文字が大きく見えてしまうのを防ぐ。
+       Yu Gothic UI は線が太めに見えるため、より細い Meiryo UI を先に使う。 */
+    --font-ui: "Segoe UI", "Meiryo UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP",
+      system-ui, sans-serif;
     --font-mono: "Cascadia Mono", Consolas, "Noto Sans Mono", "Hiragino Sans",
       monospace;
     color-scheme: light dark;
@@ -596,13 +582,10 @@
       inset 0 -1px 0 0 var(--active-line-border);
   }
 
-  /* URL には常に下線を表示し、Ctrl/Cmd を押している間だけ
-     クリックで開けることが分かるようポインタカーソルにする。 */
+  /* URL には常に下線を表示し、ホバーした時点でクリック可能なことが
+     分かるようポインタカーソルにする(開くには Ctrl/Cmd+クリックが必要)。 */
   .editor :global(.cm-url-link) {
     text-decoration: underline;
-  }
-
-  :global(html.mod-key) .editor :global(.cm-url-link) {
     cursor: pointer;
   }
 

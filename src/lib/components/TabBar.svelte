@@ -14,6 +14,16 @@
     onclose: (id: string) => void;
     onnew: () => void;
   } = $props();
+
+  /**
+   * 日本語などの全角文字は、同じ font-size でも欧文よりひと回り大きく
+   * 見えてしまう(フォント自体が違っても字面のデザイン上そうなりやすい)ため、
+   * 含まれている場合はタブ名のフォントサイズを少し落として釣り合わせる。
+   */
+  const CJK_PATTERN = /[　-ヿ㐀-鿿豈-﫿＀-￯]/;
+  function isCjk(name: string): boolean {
+    return CJK_PATTERN.test(name);
+  }
 </script>
 
 <div class="tabbar" role="tablist">
@@ -28,7 +38,7 @@
         onclick={() => onselect(tab.id)}
       >
         <span class="dot" class:visible={tab.dirty} aria-hidden="true">●</span>
-        <span class="name">{tab.name}</span>
+        <span class="name" class:cjk={isCjk(tab.name)}>{tab.name}</span>
         {#if tab.dirty}<span class="sr-only">(未保存)</span>{/if}
       </button>
       <button
@@ -97,6 +107,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* 全角文字は同じ font-size でも欧文より大きく見えるため少し縮める */
+  .name.cjk {
+    font-size: 0.85em;
   }
 
   .dot {
