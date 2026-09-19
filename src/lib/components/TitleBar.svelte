@@ -123,6 +123,8 @@
     font-weight: 100;
     line-height: 1;
     cursor: pointer;
+    /* OS 標準のウィンドウ操作ボタンと同じく、ホバーは即時に切り替える */
+    transition: none;
   }
 
   .control:hover {

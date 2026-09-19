@@ -205,6 +205,7 @@
     font-size: 0.74rem;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    user-select: none;
   }
 
   .spacer {
@@ -248,11 +249,12 @@
     background: var(--bg);
     color: var(--fg);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-popup);
     font-size: 0.8rem;
     white-space: normal;
     z-index: 50;
+    animation: popup-in 0.11s var(--ease);
   }
 
   .zoom-presets {
@@ -315,11 +317,12 @@
     min-width: 8rem;
     background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-popup);
     font-size: 0.8rem;
     white-space: nowrap;
     z-index: 50;
+    animation: popup-in 0.11s var(--ease);
   }
 
   .picker-item {

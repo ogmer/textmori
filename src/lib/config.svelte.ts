@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { watchImmediate } from "@tauri-apps/plugin-fs";
 
-export type Theme = "system" | "light" | "dark";
+type Theme = "system" | "light" | "dark";
 
 /** Rust 側 (src-tauri/src/config.rs) の AppConfig と対応する JSON 表現 */
 interface RawConfig {

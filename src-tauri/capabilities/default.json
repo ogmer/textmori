@@ -15,7 +15,6 @@
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
     "opener:default",
-    "fs:default",
     {
       "identifier": "fs:allow-watch",
       "allow": [{ "path": "$APPCONFIG/**" }]

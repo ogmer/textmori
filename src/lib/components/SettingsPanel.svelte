@@ -151,6 +151,7 @@
     align-items: center;
     justify-content: center;
     z-index: 100;
+    animation: fade-in 0.12s var(--ease);
   }
 
   .panel {
@@ -159,14 +160,15 @@
     max-height: calc(100vh - 2rem);
     overflow-y: auto;
     padding: 1.25em 1.5em;
-    border-radius: 8px;
+    border-radius: var(--radius);
     background: var(--bg);
     color: var(--fg);
     border: 1px solid var(--border);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--shadow-popup);
     display: flex;
     flex-direction: column;
     gap: 0.7em;
+    animation: popup-in 0.12s var(--ease);
   }
 
   h2 {
@@ -211,6 +213,19 @@
     background: var(--bg);
     color: var(--fg);
     font: inherit;
+    outline: none;
+    transition:
+      border-color 0.12s var(--ease),
+      box-shadow 0.12s var(--ease);
+  }
+
+  .field input[type="text"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+
+  .radio input {
+    accent-color: var(--accent);
   }
 
   .theme-field {
@@ -291,6 +306,10 @@
 
   button:hover {
     background: var(--hover);
+  }
+
+  button:active {
+    background: var(--border);
   }
 
   .close {

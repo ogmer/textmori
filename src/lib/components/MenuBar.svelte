@@ -88,6 +88,7 @@
     background: var(--chrome-bg);
     border-bottom: 1px solid var(--border);
     font-size: 0.8rem;
+    user-select: none;
   }
 
   .menu {
@@ -117,9 +118,10 @@
     padding: 0.3em;
     background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-popup);
     z-index: 60;
+    animation: popup-in 0.11s var(--ease);
   }
 
   .entry {
@@ -127,9 +129,9 @@
     align-items: center;
     gap: 0.5em;
     width: 100%;
-    padding: 0.35em 0.5em;
+    padding: 0.4em 0.6em;
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     background: none;
     color: var(--fg);
     font: inherit;
@@ -152,7 +154,9 @@
   }
 
   .accelerator {
+    margin-left: 1.5em;
     color: var(--muted);
+    font-size: 0.92em;
     font-variant-numeric: tabular-nums;
   }
 

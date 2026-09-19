@@ -64,6 +64,7 @@
     overflow-x: auto;
     background: var(--tabbar-bg);
     scrollbar-width: thin;
+    user-select: none;
   }
 
   /* メモ帳のように、1枚あたりの縦横の余白を広めに取った角丸タブにする */
@@ -76,6 +77,9 @@
     border-radius: 8px 8px 0 0;
     background: transparent;
     color: var(--muted);
+    transition:
+      background-color 0.12s var(--ease),
+      color 0.12s var(--ease);
   }
 
   .tab:hover {
@@ -85,7 +89,8 @@
   .tab.active {
     background: var(--bg);
     color: var(--fg);
-    box-shadow: none;
+    /* 選択中のタブを細いアクセント線でさりげなく示す */
+    box-shadow: inset 0 2px 0 var(--accent);
   }
 
   .label {

@@ -19,7 +19,21 @@ pub struct DecodedFile {
 /// どれにも完全には一致しない場合は、UTF-8 として置換文字付きで読み込む
 /// (フォールバック方針: 常に何らかの形で開けることを優先し、内容の欠落は
 /// had_errors で呼び出し側に伝える)。
-fn detect_and_decode(bytes: &[u8]) -> (String, &'static Encoding, bool) {
+fn detect_and_decode(bytes: Vec<u8>) -> (String, &'static Encoding, bool) {
+    // 最も一般的な UTF-8 は、検証だけ行って所有権ごと String にする(ゼロコピー)。
+    // encoding_rs の decode().into_owned() だとファイル全体を余計にコピーしてしまう。
+    // UTF-16 の BOM (FF FE / FE FF) は UTF-8 として不正なので、ここでは誤判定されない。
+    let bytes = match String::from_utf8(bytes) {
+        Ok(mut text) => {
+            if text.starts_with('\u{FEFF}') {
+                text.drain(..'\u{FEFF}'.len_utf8());
+            }
+            return (text, UTF_8, false);
+        }
+        Err(error) => error.into_bytes(),
+    };
+    let bytes = bytes.as_slice();
+
     if let Some(text) = bytes.strip_prefix(b"\xEF\xBB\xBF") {
         let (decoded, _, had_errors) = UTF_8.decode(text);
         return (decoded.into_owned(), UTF_8, had_errors);
@@ -33,11 +47,6 @@ fn detect_and_decode(bytes: &[u8]) -> (String, &'static Encoding, bool) {
         return (decoded.into_owned(), UTF_16BE, had_errors);
     }
 
-    let (utf8, _, had_errors) = UTF_8.decode(bytes);
-    if !had_errors {
-        return (utf8.into_owned(), UTF_8, false);
-    }
-
     let (sjis, _, had_errors) = SHIFT_JIS.decode(bytes);
     if !had_errors {
         return (sjis.into_owned(), SHIFT_JIS, false);
@@ -49,6 +58,7 @@ fn detect_and_decode(bytes: &[u8]) -> (String, &'static Encoding, bool) {
     }
 
     // どれも完全には一致しない場合は、置換文字付きで UTF-8 として扱う
+    let (utf8, _, _) = UTF_8.decode(bytes);
     (utf8.into_owned(), UTF_8, true)
 }
 
@@ -75,7 +85,7 @@ fn encoding_by_name(name: &str) -> &'static Encoding {
 #[tauri::command]
 pub fn read_text_file_detect(path: String) -> Result<DecodedFile, String> {
     let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-    let (content, encoding, had_errors) = detect_and_decode(&bytes);
+    let (content, encoding, had_errors) = detect_and_decode(bytes);
     Ok(DecodedFile {
         content,
         encoding: encoding_name(encoding).to_string(),
@@ -122,7 +132,7 @@ mod tests {
 
     #[test]
     fn detects_utf8() {
-        let (text, encoding, had_errors) = detect_and_decode("こんにちは".as_bytes());
+        let (text, encoding, had_errors) = detect_and_decode("こんにちは".as_bytes().to_vec());
         assert_eq!(text, "こんにちは");
         assert_eq!(encoding_name(encoding), "UTF-8");
         assert!(!had_errors);
@@ -132,7 +142,7 @@ mod tests {
     fn detects_utf8_bom() {
         let mut bytes = vec![0xEF, 0xBB, 0xBF];
         bytes.extend_from_slice("hello".as_bytes());
-        let (text, encoding, had_errors) = detect_and_decode(&bytes);
+        let (text, encoding, had_errors) = detect_and_decode(bytes.to_vec());
         assert_eq!(text, "hello");
         assert_eq!(encoding_name(encoding), "UTF-8");
         assert!(!had_errors);
@@ -141,7 +151,7 @@ mod tests {
     #[test]
     fn detects_shift_jis() {
         let (bytes, _, _) = SHIFT_JIS.encode("日本語のテキスト");
-        let (text, encoding, had_errors) = detect_and_decode(&bytes);
+        let (text, encoding, had_errors) = detect_and_decode(bytes.to_vec());
         assert_eq!(text, "日本語のテキスト");
         assert_eq!(encoding_name(encoding), "Shift_JIS");
         assert!(!had_errors);
@@ -150,7 +160,7 @@ mod tests {
     #[test]
     fn detects_euc_jp() {
         let (bytes, _, _) = EUC_JP.encode("日本語のテキスト");
-        let (text, encoding, had_errors) = detect_and_decode(&bytes);
+        let (text, encoding, had_errors) = detect_and_decode(bytes.to_vec());
         assert_eq!(text, "日本語のテキスト");
         assert_eq!(encoding_name(encoding), "EUC-JP");
         assert!(!had_errors);
@@ -160,10 +170,96 @@ mod tests {
     fn falls_back_to_utf8_with_errors_for_binary_garbage() {
         // UTF-8 としても Shift_JIS / EUC-JP としても正しく解釈できないバイト列
         let bytes: Vec<u8> = vec![0xFF, 0xFE, 0xFF, 0x00, 0x80, 0x81, 0x8F, 0xA0];
-        let (_, encoding, had_errors) = detect_and_decode(&bytes);
+        let (_, encoding, had_errors) = detect_and_decode(bytes.to_vec());
         // 先頭 2 バイトが UTF-16LE の BOM と一致するため UTF-16LE として判定される
         assert_eq!(encoding_name(encoding), "UTF-16LE");
         let _ = had_errors;
+    }
+
+    #[test]
+    fn empty_input_is_utf8_without_errors() {
+        let (text, encoding, had_errors) = detect_and_decode(Vec::new());
+        assert_eq!(text, "");
+        assert_eq!(encoding_name(encoding), "UTF-8");
+        assert!(!had_errors);
+    }
+
+    #[test]
+    fn utf8_bom_is_stripped_but_content_is_kept() {
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes.extend_from_slice("日本語".as_bytes());
+        let (text, encoding, had_errors) = detect_and_decode(bytes);
+        assert_eq!(text, "日本語");
+        assert_eq!(encoding_name(encoding), "UTF-8");
+        assert!(!had_errors);
+    }
+
+    #[test]
+    fn utf8_bom_followed_by_invalid_bytes_reports_errors_and_stays_utf8() {
+        // BOM 付きで中身が壊れている場合は、Shift_JIS 等へ誤判定せず UTF-8 のまま警告する(従来仕様)
+        let bytes = vec![0xEF, 0xBB, 0xBF, b'a', 0xFF, b'b'];
+        let (text, encoding, had_errors) = detect_and_decode(bytes);
+        assert_eq!(encoding_name(encoding), "UTF-8");
+        assert!(had_errors);
+        assert!(text.starts_with('a') && text.ends_with('b'));
+    }
+
+    #[test]
+    fn decodes_utf16le_and_utf16be_with_bom() {
+        let mut le = vec![0xFF, 0xFE];
+        le.extend("あa".encode_utf16().flat_map(|u| u.to_le_bytes()));
+        let (text, encoding, _) = detect_and_decode(le);
+        assert_eq!(text, "あa");
+        assert_eq!(encoding_name(encoding), "UTF-16LE");
+
+        let mut be = vec![0xFE, 0xFF];
+        be.extend("あa".encode_utf16().flat_map(|u| u.to_be_bytes()));
+        let (text, encoding, _) = detect_and_decode(be);
+        assert_eq!(text, "あa");
+        assert_eq!(encoding_name(encoding), "UTF-16BE");
+    }
+
+    #[test]
+    fn crlf_line_endings_are_preserved_in_content() {
+        let (text, _, _) = detect_and_decode(b"a\r\nb\r\nc".to_vec());
+        assert_eq!(text, "a\r\nb\r\nc");
+    }
+
+    #[test]
+    fn large_utf8_file_is_decoded_intact() {
+        let line = "The quick brown fox 日本語テキスト 0123456789\n";
+        let big = line.repeat(200_000); // 約 10MB
+        let (text, encoding, had_errors) = detect_and_decode(big.clone().into_bytes());
+        assert_eq!(encoding_name(encoding), "UTF-8");
+        assert!(!had_errors);
+        assert_eq!(text.len(), big.len());
+        assert!(text == big);
+    }
+
+    #[test]
+    fn shift_jis_text_survives_a_write_and_read_roundtrip() {
+        let dir = std::env::temp_dir().join(format!(
+            "textmori-sjis-{}",
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sjis.txt");
+        write_text_file_encoded(
+            path.to_string_lossy().into_owned(),
+            "日本語のテキスト".to_string(),
+            "Shift_JIS".to_string(),
+        )
+        .unwrap();
+        let read = read_text_file_detect(path.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(read.content, "日本語のテキスト");
+        assert_eq!(read.encoding, "Shift_JIS");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn reading_a_missing_file_returns_an_error_instead_of_panicking() {
+        let missing = std::env::temp_dir().join("textmori-does-not-exist").join("file.txt");
+        assert!(read_text_file_detect(missing.to_string_lossy().into_owned()).is_err());
     }
 
     #[test]

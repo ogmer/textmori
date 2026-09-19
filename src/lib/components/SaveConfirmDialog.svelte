@@ -3,6 +3,10 @@
 
   let { name, onchoice }: { name: string; onchoice: (choice: CloseChoice) => void } = $props();
 
+  // メモ帳と同じく「保存」を既定の選択肢にする(表示直後に Enter で保存できる)
+  let saveButton: HTMLButtonElement | undefined = $state();
+  $effect(() => saveButton?.focus());
+
   function handleBackdropKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") onchoice("cancel");
   }
@@ -18,7 +22,9 @@
     <p id="save-confirm-title" class="title">textmori</p>
     <p class="message">「{name}」への変更内容を保存しますか?</p>
     <div class="actions">
-      <button type="button" class="save" onclick={() => onchoice("save")}>保存</button>
+      <button type="button" class="save" bind:this={saveButton} onclick={() => onchoice("save")}>
+        保存
+      </button>
       <button type="button" onclick={() => onchoice("discard")}>保存しない</button>
       <button type="button" onclick={() => onchoice("cancel")}>キャンセル</button>
     </div>
@@ -34,20 +40,22 @@
     align-items: center;
     justify-content: center;
     z-index: 200;
+    animation: fade-in 0.12s var(--ease);
   }
 
   .dialog {
     width: 22rem;
     max-width: calc(100vw - 2rem);
     padding: 1.1em 1.3em;
-    border-radius: 8px;
+    border-radius: var(--radius);
     background: var(--bg);
     color: var(--fg);
     border: 1px solid var(--border);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-popup);
     display: flex;
     flex-direction: column;
     gap: 0.9em;
+    animation: popup-in 0.12s var(--ease);
   }
 
   .title {
@@ -69,8 +77,9 @@
   }
 
   .actions button {
+    min-width: 5.5em;
     padding: 0.45em 1em;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--hover);
     color: var(--fg);
@@ -82,9 +91,19 @@
     filter: brightness(1.1);
   }
 
+  .actions button:active {
+    filter: brightness(0.95);
+  }
+
   .actions .save {
     background: var(--accent);
     border-color: var(--accent);
     color: #fff;
+  }
+
+  /* アクセント色の背景ではアクセント色のリングが見えないため、白系にする */
+  .actions .save:focus-visible {
+    outline-color: #fff;
+    outline-offset: -4px;
   }
 </style>

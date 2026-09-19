@@ -1,4 +1,5 @@
-import { EditorState, Text } from "@codemirror/state";
+import { EditorState, Text, type Extension } from "@codemirror/state";
+import { getSearchQuery, setSearchQuery } from "@codemirror/search";
 import { EditorView, type Command, type ViewUpdate } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -12,7 +13,7 @@ import {
   save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
 import { createEditorState, markdownCompartment, wrapCompartment } from "./editor";
-import { isMarkdownPath, markdownExtension } from "./markdown";
+import { isMarkdownPath, loadMarkdownExtension } from "./markdown";
 
 export type Eol = "LF" | "CRLF";
 export const EOLS: Eol[] = ["LF", "CRLF"];
@@ -27,7 +28,7 @@ export const ENCODINGS: TextEncoding[] = [
   "UTF-16LE",
   "UTF-16BE",
 ];
-export const DEFAULT_ENCODING: TextEncoding = "UTF-8";
+const DEFAULT_ENCODING: TextEncoding = "UTF-8";
 
 interface DecodedFile {
   content: string;
@@ -62,13 +63,31 @@ export type CloseChoice = "save" | "discard" | "cancel";
 const SESSION_KEY = "textmori:session";
 /** 入力中の頻繁な保存を間引く間隔(ms) */
 const PERSIST_DEBOUNCE_MS = 300;
+/** セッション全体の文字数がこれを超えると localStorage(概ね 5MiB 前後)には
+ *  確実に収まらず setItem が失敗する。失敗すると分かっているのに、入力のたびに
+ *  巨大な文字列を作って捨てる無駄を避けるため、超える場合は保存自体を行わない。 */
+const PERSIST_MAX_CHARS = 5 * 1024 * 1024;
 
 interface PersistedTab {
   path: string | null;
   content: string;
-  savedContent: string;
+  /** 未保存の変更がある時だけ保持する(無い場合は content と同一なので省く) */
+  savedContent?: string | null;
   eol: Eol;
   encoding: TextEncoding;
+}
+
+/** Text は不変なので、同じインスタンスなら文字列化の結果を使い回せる。
+ *  入力中に触っていないタブや、保存済みの内容を毎回 toString() し直さないための
+ *  キャッシュ(大きいファイルほど効く)。 */
+const docTextCache = new WeakMap<Text, string>();
+function docToString(doc: Text): string {
+  let text = docTextCache.get(doc);
+  if (text === undefined) {
+    text = doc.toString();
+    docTextCache.set(doc, text);
+  }
+  return text;
 }
 
 interface PersistedSession {
@@ -76,6 +95,19 @@ interface PersistedSession {
   activeIndex: number;
   wrap: boolean;
   zoom: number;
+}
+
+/** セッション保存用に、タブ1枚ぶんを保存形式へ変換する。
+ *  未変更のタブは savedContent を省く(content と同一で、重複して文字列化・保存する
+ *  ぶんの時間と localStorage の容量がもったいないため)。 */
+export function serializeTab(tab: Tab): PersistedTab {
+  return {
+    path: tab.path,
+    content: docToString(tab.editorState.doc),
+    savedContent: tab.dirty ? docToString(tab.savedDoc) : null,
+    eol: tab.eol,
+    encoding: tab.encoding,
+  };
 }
 
 const FILTERS = [
@@ -134,9 +166,9 @@ export class Tab {
       : firstLine;
   }
 
-  get dirty(): boolean {
-    return !this.editorState.doc.eq(this.savedDoc);
-  }
+  /** 保存済みの内容と異なるか。タブバー・タイトル・保存確認など複数箇所から
+   *  読まれるため、変更があった時に1回だけ比較する($derived でキャッシュ)。 */
+  readonly dirty = $derived(!this.editorState.doc.eq(this.savedDoc));
 
   /** 元ファイルの改行コードを維持したまま書き出す内容 */
   get serialized(): string {
@@ -145,7 +177,7 @@ export class Tab {
   }
 }
 
-export type SplitDirection = "vertical" | "horizontal";
+type SplitDirection = "vertical" | "horizontal";
 
 export class Workspace {
   tabs = $state<Tab[]>([]);
@@ -162,6 +194,35 @@ export class Workspace {
   #splitView: EditorView | null = null;
   #syncingSplit = false;
   #pendingCloseResolve: ((choice: CloseChoice) => void) | null = null;
+  /** 読み込み済みの Markdown 装飾。Markdown を開くまでは null(読み込まない)。 */
+  #markdown: Extension | null = null;
+
+  /** Markdown 装飾を(未読み込みなら)読み込み、開いている Markdown タブへ反映する。 */
+  async #loadMarkdown(): Promise<void> {
+    if (this.#markdown) return;
+    this.#markdown = await loadMarkdownExtension();
+    for (const tab of this.tabs) {
+      if (isMarkdownPath(tab.path)) this.#reconfigureMarkdown(tab, this.#markdown);
+    }
+  }
+
+  /** タブの現在のパスに合わせて Markdown 装飾を有効/無効にする。 */
+  async #syncMarkdown(tab: Tab): Promise<void> {
+    const enabled = isMarkdownPath(tab.path);
+    if (enabled) await this.#loadMarkdown();
+    this.#reconfigureMarkdown(tab, enabled && this.#markdown ? this.#markdown : []);
+  }
+
+  #reconfigureMarkdown(tab: Tab, extension: Extension): void {
+    const effects = markdownCompartment.reconfigure(extension);
+    if (this.#view && this.activeId === tab.id) {
+      this.#view.dispatch({ effects });
+      this.#splitView?.dispatch({ effects });
+    } else {
+      // 表示中でないタブは、状態だけ更新しておけば切り替え時に反映される
+      tab.editorState = tab.editorState.update({ effects }).state;
+    }
+  }
 
   /** 保存確認ダイアログの選択結果を伝える(ダイアログ側の UI から呼ぶ) */
   resolvePendingClose(choice: CloseChoice): void {
@@ -197,14 +258,66 @@ export class Workspace {
     else if (event.deltaY > 0) this.zoomOut();
   };
 
+  /**
+   * ズーム用の wheel リスナーは preventDefault のため passive:false が必要だが、
+   * 常時付けておくと通常のスクロールまで毎回メインスレッドの処理待ちになり、
+   * 大きな文書でスクロールがもたつく。Ctrl/Cmd が押されている間だけ付け外しする。
+   * (フォーカスが Ctrl 押下中に移る場合に備え、マウス移動でも状態を同期する)
+   */
+  #watchZoomWheel(parent: HTMLElement): () => void {
+    let armed = false;
+    const arm = (on: boolean): void => {
+      if (on === armed) return;
+      armed = on;
+      if (on) parent.addEventListener("wheel", this.#handleZoomWheel, { passive: false });
+      else parent.removeEventListener("wheel", this.#handleZoomWheel);
+    };
+    const sync = (event: KeyboardEvent | MouseEvent): void => arm(event.ctrlKey || event.metaKey);
+    const disarm = (): void => arm(false);
+
+    window.addEventListener("keydown", sync, { passive: true });
+    window.addEventListener("keyup", sync, { passive: true });
+    window.addEventListener("blur", disarm, { passive: true });
+    parent.addEventListener("mousemove", sync, { passive: true });
+    return () => {
+      disarm();
+      window.removeEventListener("keydown", sync);
+      window.removeEventListener("keyup", sync);
+      window.removeEventListener("blur", disarm);
+      parent.removeEventListener("mousemove", sync);
+    };
+  }
+
   /** エディタを DOM にマウントする。戻り値は破棄用のクリーンアップ関数。 */
   attach(parent: HTMLElement): () => void {
     if (this.tabs.length === 0 && !this.#restoreSession()) this.newTab();
-    this.#view = new EditorView({ state: this.active!.editorState, parent });
-    this.#view.focus();
-    parent.addEventListener("wheel", this.#handleZoomWheel, { passive: false });
+
+    let disposed = false;
+    let unwatchWheel: (() => void) | null = null;
+    const mount = (): void => {
+      if (disposed) return;
+      this.#view = new EditorView({ state: this.active!.editorState, parent });
+      this.#view.focus();
+      unwatchWheel = this.#watchZoomWheel(parent);
+    };
+
+    if (isMarkdownPath(this.active?.path ?? null)) {
+      // 最初に表示するのが Markdown なら、装飾の読み込みを待ってから描画する
+      // (先にプレーンで描くと、見出しが後から大きくなってレイアウトがずれる)。
+      // 読み込みに失敗してもプレーンテキストとして開けるようにする。
+      this.#loadMarkdown().catch(() => undefined).finally(mount);
+    } else {
+      mount();
+      // 表示外の Markdown タブがあれば、描画が落ち着いてから読み込んでおく
+      if (this.tabs.some((tab) => isMarkdownPath(tab.path))) {
+        const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 50));
+        idle(() => void this.#loadMarkdown().catch(() => undefined));
+      }
+    }
+
     return () => {
-      parent.removeEventListener("wheel", this.#handleZoomWheel);
+      disposed = true;
+      unwatchWheel?.();
       this.#view?.destroy();
       this.#view = null;
     };
@@ -217,9 +330,9 @@ export class Workspace {
       state: tab ? tab.editorState : this.#createState(""),
       parent,
     });
-    parent.addEventListener("wheel", this.#handleZoomWheel, { passive: false });
+    const unwatchWheel = this.#watchZoomWheel(parent);
     return () => {
-      parent.removeEventListener("wheel", this.#handleZoomWheel);
+      unwatchWheel();
       this.#splitView?.destroy();
       this.#splitView = null;
     };
@@ -256,7 +369,10 @@ export class Workspace {
         this.#activate(opened);
         continue;
       }
-      const { content, encoding, hadErrors } = await readTextFileDetect(path);
+      const [{ content, encoding, hadErrors }] = await Promise.all([
+        readTextFileDetect(path),
+        isMarkdownPath(path) ? this.#loadMarkdown() : undefined,
+      ]);
       const eol: Eol = content.includes("\r\n") ? "CRLF" : "LF";
       this.#addTab(new Tab(this.#createState(content, path), path, eol, encoding));
       if (hadErrors) {
@@ -288,11 +404,7 @@ export class Workspace {
     target.path = path;
     target.savedDoc = target.editorState.doc;
     // 拡張子が変わって Markdown になった/でなくなった場合に備えて装飾を再設定する
-    if (this.activeId === target.id) {
-      const effects = markdownCompartment.reconfigure(markdownExtension(isMarkdownPath(path)));
-      this.#view?.dispatch({ effects });
-      this.#splitView?.dispatch({ effects });
-    }
+    await this.#syncMarkdown(target);
     this.#persistNow();
     return true;
   }
@@ -430,7 +542,8 @@ export class Workspace {
   }
 
   #createState(doc: string, path: string | null = null): EditorState {
-    return createEditorState(doc, this.wrap, isMarkdownPath(path), this.#onUpdate);
+    const markdown = isMarkdownPath(path) && this.#markdown ? this.#markdown : [];
+    return createEditorState(doc, this.wrap, markdown, this.#onUpdate);
   }
 
   /** エディタの変更をアクティブなタブへ書き戻し、派生状態を最新に保つ。
@@ -470,9 +583,15 @@ export class Workspace {
   }
 
   #activate(tab: Tab): void {
+    // 検索語はタブごとの状態に入っているため、そのままではタブを切り替えると消えてしまう。
+    // 直前のタブの検索語・オプションを引き継ぎ、Enter/F3 での「次を検索」を続けられるようにする。
+    const previousQuery = this.#view ? getSearchQuery(this.#view.state) : null;
     this.activeId = tab.id;
     this.#view?.setState(tab.editorState);
     this.#splitView?.setState(tab.editorState);
+    if (this.#view && previousQuery?.search && !getSearchQuery(this.#view.state).search) {
+      this.#view.dispatch({ effects: setSearchQuery.of(previousQuery) });
+    }
     this.#applyWrap();
     this.#view?.focus();
   }
@@ -500,15 +619,14 @@ export class Workspace {
       clearTimeout(this.#persistTimer);
       this.#persistTimer = null;
     }
+    const chars = this.tabs.reduce(
+      (n, tab) => n + tab.editorState.doc.length + (tab.dirty ? tab.savedDoc.length : 0),
+      0,
+    );
+    if (chars > PERSIST_MAX_CHARS) return;
     try {
       const data: PersistedSession = {
-        tabs: this.tabs.map((tab) => ({
-          path: tab.path,
-          content: tab.editorState.doc.toString(),
-          savedContent: tab.savedDoc.toString(),
-          eol: tab.eol,
-          encoding: tab.encoding,
-        })),
+        tabs: this.tabs.map(serializeTab),
         activeIndex: Math.max(
           0,
           this.tabs.findIndex((tab) => tab.id === this.activeId),
@@ -542,9 +660,11 @@ export class Workspace {
           t.eol === "CRLF" ? "CRLF" : "LF",
           isTextEncoding(t.encoding) ? t.encoding : DEFAULT_ENCODING,
         );
-        tab.savedDoc = EditorState.create({
-          doc: String(t.savedContent ?? t.content ?? ""),
-        }).doc;
+        // savedContent が無い(=未変更)か content と同一なら、構築済みの Text を共有する。
+        // Text.eq が同一インスタンスで即 true になり、二重に文書を組み立てずに済む。
+        if (t.savedContent != null && t.savedContent !== t.content) {
+          tab.savedDoc = EditorState.create({ doc: String(t.savedContent) }).doc;
+        }
         return tab;
       });
       this.tabs = tabs;

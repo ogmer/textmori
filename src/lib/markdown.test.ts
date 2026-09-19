@@ -1,5 +1,23 @@
+import { syntaxTree } from "@codemirror/language";
+import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
-import { isMarkdownPath } from "./markdown";
+import { isMarkdownPath, loadMarkdownExtension } from "./markdown";
+
+describe("loadMarkdownExtension", () => {
+  it("loads lazily and returns the same extension on every call", async () => {
+    const first = await loadMarkdownExtension();
+    const second = await loadMarkdownExtension();
+    expect(second).toBe(first);
+  });
+
+  it("enables Markdown parsing when applied to a state", async () => {
+    const extension = await loadMarkdownExtension();
+    const state = EditorState.create({ doc: "# 見出し\n\n本文", extensions: extension });
+    const names: string[] = [];
+    syntaxTree(state).iterate({ enter: (node) => void names.push(node.name) });
+    expect(names).toContain("ATXHeading1");
+  });
+});
 
 describe("isMarkdownPath", () => {
   it("recognizes .md files", () => {

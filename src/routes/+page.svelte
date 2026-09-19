@@ -12,6 +12,7 @@
   import TabBar from "$lib/components/TabBar.svelte";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import { config } from "$lib/config.svelte";
+  import { openReplacePanel } from "$lib/search-panel";
   import { BASE_FONT_SIZE, DEFAULT_ZOOM, workspace } from "$lib/workspace.svelte";
 
   let host: HTMLDivElement;
@@ -31,12 +32,15 @@
 
   const appWindow = getCurrentWindow();
 
-  $effect(() => {
+  // 文字列を $derived にしておけば、タイトルが変わった時だけ effect が走る。
+  // (effect 内で直接組み立てると、カーソル移動や入力のたびに setTitle の IPC が飛ぶ)
+  const windowTitle = $derived.by(() => {
     const tab = workspace.active;
-    const title = tab
-      ? `${tab.dirty ? "● " : ""}${tab.name} — textmori`
-      : "textmori";
-    appWindow.setTitle(title);
+    return tab ? `${tab.dirty ? "● " : ""}${tab.name} — textmori` : "textmori";
+  });
+
+  $effect(() => {
+    appWindow.setTitle(windowTitle);
   });
 
   // 配色: "system" のときは data-theme を外し、OS の設定(prefers-color-scheme)
@@ -98,7 +102,7 @@
         {
           label: "置換",
           accelerator: "Ctrl+H",
-          action: () => workspace.runCommand(openSearchPanel),
+          action: () => workspace.runCommand(openReplacePanel),
         },
       ],
     },
@@ -241,9 +245,10 @@
         workspace.runCommand(openSearchPanel);
         break;
       case "h":
-        if (isFormField || event.defaultPrevented) return;
+        // 入力欄(検索パネル自身を含む)の中でも置換欄を開けるよう、isFormField では弾かない
+        if (event.defaultPrevented) return;
         event.preventDefault();
-        workspace.runCommand(openSearchPanel);
+        workspace.runCommand(openReplacePanel);
         break;
       case "\\":
         event.preventDefault();
@@ -416,6 +421,7 @@
     --match-active: rgba(59, 116, 216, 0.38);
     --scrollbar-thumb: rgba(121, 121, 121, 0.35);
     --scrollbar-thumb-hover: rgba(100, 100, 100, 0.6);
+    --shadow-popup: 0 6px 20px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.12);
     /* "Meiryo UI" / "Yu Gothic UI" は Segoe UI と視覚的な大きさが揃うよう
        設計された Windows 標準の日本語 UI フォントのため、Noto Sans JP 等より
        先に指定し、日本語だけ文字が大きく見えてしまうのを防ぐ。
@@ -425,6 +431,9 @@
     --font-mono: "Cascadia Mono", Consolas, "Noto Sans Mono", "Hiragino Sans",
       monospace;
     color-scheme: light dark;
+    --radius: 8px;
+    --radius-sm: 5px;
+    --ease: cubic-bezier(0.2, 0, 0, 1);
   }
 
   /* 配色が "system" (data-theme 未指定)のときだけ OS の設定に追従する。
@@ -446,6 +455,7 @@
       --match-active: rgba(91, 155, 255, 0.4);
       --scrollbar-thumb: rgba(150, 150, 150, 0.35);
       --scrollbar-thumb-hover: rgba(180, 180, 180, 0.55);
+      --shadow-popup: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
     }
   }
 
@@ -466,6 +476,7 @@
     --match-active: rgba(91, 155, 255, 0.4);
     --scrollbar-thumb: rgba(255, 255, 255, 0.2);
     --scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
+    --shadow-popup: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
   }
 
   :global(html),
@@ -479,6 +490,59 @@
     color: var(--fg);
     font-family: var(--font-ui);
     overflow: hidden;
+  }
+
+  /* ── 触り心地の共通ルール(色やレイアウトは変えず、動きは 0.1 秒台の
+        フェードだけに留める) ───────────────────────────────────── */
+
+  /* ホバー/押下の変化をなめらかにする。ウィンドウ操作ボタンは OS 標準に
+     合わせて即時のままにするため、個別に transition: none を指定している。 */
+  :global(button) {
+    transition:
+      background-color 0.12s var(--ease),
+      color 0.12s var(--ease),
+      border-color 0.12s var(--ease),
+      opacity 0.12s var(--ease);
+  }
+
+  /* キーボード操作時だけ見えるフォーカスリング(マウス操作では出ない)。
+     エディタ本体(contenteditable)は独自のキャレットで示すため対象外。 */
+  :global(button:focus-visible),
+  :global(input:focus-visible),
+  :global(summary:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  /* ポップアップ/ダイアログの出現。淡く現れるだけで、位置はほとんど動かさない */
+  @keyframes -global-popup-in {
+    from {
+      opacity: 0;
+      transform: translateY(3px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes -global-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* OS の「視覚効果を減らす」設定を尊重する */
+  @media (prefers-reduced-motion: reduce) {
+    :global(*),
+    :global(*::before),
+    :global(*::after) {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 
   /* スクロールバーはトラックを透明にし、つまみだけ半透明で重ねて表示する
@@ -607,10 +671,12 @@
     background: var(--match-active);
   }
 
+  /* パネル(検索・置換 / 行へ移動)の共通の見た目 */
   .editor :global(.cm-panels) {
     background: var(--chrome-bg);
     color: var(--fg);
     border-bottom: 1px solid var(--border);
+    font-family: var(--font-ui);
   }
 
   .editor :global(.cm-panel input),
@@ -618,7 +684,149 @@
     background: var(--bg);
     color: var(--fg);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     font-family: var(--font-ui);
+    font-size: 0.8rem;
+  }
+
+  .editor :global(.cm-panel button) {
+    cursor: pointer;
+  }
+
+  .editor :global(.cm-panel button:hover) {
+    background: var(--hover);
+  }
+
+  .editor :global(.cm-panel button:active) {
+    background: var(--border);
+  }
+
+  /* 検索・置換パネル(src/lib/search-panel.ts) */
+  .editor :global(.tm-search) {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    font-size: 0.8rem;
+  }
+
+  .editor :global(.tm-row) {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 46rem;
+  }
+
+  .editor :global(.tm-field) {
+    position: relative;
+    flex: 1;
+    display: flex;
+    min-width: 8rem;
+  }
+
+  .editor :global(.tm-input) {
+    flex: 1;
+    min-width: 0;
+    height: 26px;
+    padding: 0 8px;
+    box-sizing: border-box;
+    outline: none;
+    transition:
+      border-color 0.12s var(--ease),
+      box-shadow 0.12s var(--ease);
+  }
+
+  /* 件数の表示ぶんの余白 */
+  .editor :global(.tm-find) {
+    padding-right: 6.5rem;
+  }
+
+  .editor :global(.tm-input:focus) {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+
+  .editor :global(.tm-input.tm-nomatch) {
+    border-color: #e5484d;
+  }
+
+  .editor :global(.tm-input.tm-nomatch:focus) {
+    box-shadow: 0 0 0 2px color-mix(in srgb, #e5484d 25%, transparent);
+  }
+
+  .editor :global(.tm-count) {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 0.74rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .editor :global(.tm-find.tm-nomatch ~ .tm-count) {
+    color: #e5484d;
+  }
+
+  .editor :global(.tm-btn),
+  .editor :global(.tm-toggle),
+  .editor :global(.tm-expand) {
+    flex: 0 0 auto;
+    height: 26px;
+    min-width: 26px;
+    padding: 0 6px;
+    line-height: 1;
+  }
+
+  .editor :global(.tm-btn.tm-text) {
+    padding: 0 10px;
+    white-space: nowrap;
+  }
+
+  /* 展開ボタンと、置換欄の左側の余白は同じ幅にして入力欄の左端を揃える */
+  .editor :global(.tm-expand),
+  .editor :global(.tm-expand-spacer) {
+    width: 22px;
+    min-width: 22px;
+    padding: 0;
+  }
+
+  .editor :global(.tm-expand-spacer) {
+    flex: 0 0 auto;
+  }
+
+  .editor :global(.tm-search .tm-expand) {
+    border-color: transparent;
+    background: none;
+    color: var(--muted);
+  }
+
+  .editor :global(.tm-search .tm-expand:hover) {
+    color: var(--fg);
+    background: var(--hover);
+  }
+
+  /* オプションのトグル: 有効な時だけアクセント色で示す */
+  .editor :global(.tm-toggle[aria-pressed='true']) {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    border-color: var(--accent);
+  }
+
+  .editor :global(.tm-search .tm-close) {
+    border-color: transparent;
+    background: none;
+    color: var(--muted);
+    font-size: 1.1rem;
+  }
+
+  .editor :global(.tm-search .tm-close:hover) {
+    color: var(--fg);
+    background: var(--hover);
+  }
+
+  .editor :global(.tm-replace-row[hidden]) {
+    display: none;
   }
 </style>
