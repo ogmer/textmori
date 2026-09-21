@@ -46,7 +46,7 @@
   .dialog {
     width: 22rem;
     max-width: calc(100vw - 2rem);
-    padding: 1.1em 1.3em;
+    padding: 1.9em 2.2em;
     border-radius: var(--radius);
     background: var(--bg);
     color: var(--fg);
@@ -54,7 +54,7 @@
     box-shadow: var(--shadow-popup);
     display: flex;
     flex-direction: column;
-    gap: 0.9em;
+    gap: 1.4em;
     animation: popup-in 0.12s var(--ease);
   }
 
@@ -72,13 +72,13 @@
 
   .actions {
     display: flex;
-    gap: 0.5em;
+    gap: 0.6em;
     justify-content: flex-end;
   }
 
   .actions button {
     min-width: 5.5em;
-    padding: 0.45em 1em;
+    padding: 0.55em 1.3em;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--hover);

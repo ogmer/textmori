@@ -84,7 +84,7 @@
   .menubar {
     display: flex;
     align-items: stretch;
-    padding: 0 0.2em;
+    padding: 0.25em 0.7em;
     background: var(--chrome-bg);
     border-bottom: 1px solid var(--border);
     font-size: 0.8rem;
@@ -96,7 +96,7 @@
   }
 
   .title {
-    padding: 0.3em 0.75em;
+    padding: 0.35em 1.1em;
     border: 0;
     border-radius: 4px;
     background: none;
@@ -115,7 +115,7 @@
     top: 100%;
     left: 0;
     min-width: 14rem;
-    padding: 0.3em;
+    padding: 0.55em;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -129,7 +129,7 @@
     align-items: center;
     gap: 0.5em;
     width: 100%;
-    padding: 0.4em 0.6em;
+    padding: 0.55em 1em;
     border: 0;
     border-radius: var(--radius-sm);
     background: none;
@@ -162,7 +162,7 @@
 
   .separator {
     height: 1px;
-    margin: 0.3em 0.5em;
+    margin: 0.4em 0.6em;
     background: var(--border);
   }
 </style>

@@ -197,8 +197,8 @@
   .statusbar {
     display: flex;
     align-items: center;
-    gap: 1em;
-    padding: 0.25em 0.85em;
+    gap: 1.6em;
+    padding: 0.55em 1.5em;
     border-top: 1px solid var(--border);
     background: var(--chrome-bg);
     color: var(--muted);

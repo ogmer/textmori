@@ -36,7 +36,7 @@
   // (effect 内で直接組み立てると、カーソル移動や入力のたびに setTitle の IPC が飛ぶ)
   const windowTitle = $derived.by(() => {
     const tab = workspace.active;
-    return tab ? `${tab.dirty ? "● " : ""}${tab.name} — textmori` : "textmori";
+    return tab ? `${tab.dirty ? "● " : ""}${tab.name}` : "textmori";
   });
 
   $effect(() => {
@@ -440,19 +440,19 @@
      "light" が明示された場合はこのブロックを無効化する。 */
   @media (prefers-color-scheme: dark) {
     :global(:root:not([data-theme="light"])) {
-      --bg: #1e1e1e;
-      --chrome-bg: #252526;
-      --tabbar-bg: #202021;
-      --tab-bg: #2a2a2b;
-      --fg: #e6e6e6;
-      --muted: #9d9d9d;
-      --border: #3a3a3a;
-      --hover: rgba(255, 255, 255, 0.09);
-      --accent: #5b9bff;
-      --active-line-border: rgba(255, 255, 255, 0.18);
-      --selection: rgba(38, 53, 105, 0.85);
-      --match: rgba(91, 155, 255, 0.2);
-      --match-active: rgba(91, 155, 255, 0.4);
+      --bg: #1a1b26;
+      --chrome-bg: #1f2335;
+      --tabbar-bg: #15161e;
+      --tab-bg: #24283b;
+      --fg: #c0caf5;
+      --muted: #7982a9;
+      --border: #2a2e45;
+      --hover: rgba(122, 162, 247, 0.12);
+      --accent: #7aa2f7;
+      --active-line-border: rgba(122, 162, 247, 0.22);
+      --selection: rgba(51, 70, 124, 0.85);
+      --match: rgba(122, 162, 247, 0.22);
+      --match-active: rgba(122, 162, 247, 0.42);
       --scrollbar-thumb: rgba(150, 150, 150, 0.35);
       --scrollbar-thumb-hover: rgba(180, 180, 180, 0.55);
       --shadow-popup: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
@@ -461,19 +461,19 @@
 
   /* 配色を "dark" に明示した場合は OS の設定に関わらず常にダークにする */
   :global(:root[data-theme="dark"]) {
-    --bg: #1e1e1e;
-    --chrome-bg: #252526;
-    --tabbar-bg: #202021;
-    --tab-bg: #2a2a2b;
-    --fg: #e6e6e6;
-    --muted: #9d9d9d;
-    --border: #3a3a3a;
-    --hover: rgba(255, 255, 255, 0.09);
-    --accent: #5b9bff;
-    --active-line-border: rgba(255, 255, 255, 0.18);
-    --selection: rgba(38, 53, 105, 0.85);
-    --match: rgba(91, 155, 255, 0.2);
-    --match-active: rgba(91, 155, 255, 0.4);
+    --bg: #1a1b26;
+    --chrome-bg: #1f2335;
+    --tabbar-bg: #15161e;
+    --tab-bg: #24283b;
+    --fg: #c0caf5;
+    --muted: #7982a9;
+    --border: #2a2e45;
+    --hover: rgba(122, 162, 247, 0.12);
+    --accent: #7aa2f7;
+    --active-line-border: rgba(122, 162, 247, 0.22);
+    --selection: rgba(51, 70, 124, 0.85);
+    --match: rgba(122, 162, 247, 0.22);
+    --match-active: rgba(122, 162, 247, 0.42);
     --scrollbar-thumb: rgba(255, 255, 255, 0.2);
     --scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
     --shadow-popup: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
@@ -636,6 +636,12 @@
      テーマの文字色に合わせて明示的に指定する。 */
   .editor :global(.cm-content) {
     caret-color: var(--fg);
+    padding: 6px 0 48px;
+  }
+
+  /* 文字が画面端に張り付かないよう、行の左右に余白を取る */
+  .editor :global(.cm-line) {
+    padding: 0 32px 0 24px;
   }
 
   /* VS Code のように、アクティブ行は塗りつぶしではなく上下の罫線で強調する */
@@ -705,15 +711,15 @@
   .editor :global(.tm-search) {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 8px 10px;
+    gap: 10px;
+    padding: 16px 24px;
     font-size: 0.8rem;
   }
 
   .editor :global(.tm-row) {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     max-width: 46rem;
   }
 
@@ -727,8 +733,8 @@
   .editor :global(.tm-input) {
     flex: 1;
     min-width: 0;
-    height: 26px;
-    padding: 0 8px;
+    height: 30px;
+    padding: 0 10px;
     box-sizing: border-box;
     outline: none;
     transition:
@@ -774,14 +780,14 @@
   .editor :global(.tm-toggle),
   .editor :global(.tm-expand) {
     flex: 0 0 auto;
-    height: 26px;
-    min-width: 26px;
-    padding: 0 6px;
+    height: 30px;
+    min-width: 30px;
+    padding: 0 8px;
     line-height: 1;
   }
 
   .editor :global(.tm-btn.tm-text) {
-    padding: 0 10px;
+    padding: 0 14px;
     white-space: nowrap;
   }
 

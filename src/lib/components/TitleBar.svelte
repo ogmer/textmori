@@ -39,7 +39,6 @@
 <header class="titlebar" data-tauri-drag-region>
   <div class="brand" data-tauri-drag-region>
     <img class="icon" src="/app-icon.png" alt="" aria-hidden="true" />
-    <span class="name">textmori</span>
   </div>
 
   <TabBar {tabs} {activeId} {onselect} {onclose} {onnew} />
@@ -80,14 +79,14 @@
     display: flex;
     align-items: stretch;
     background: var(--tabbar-bg);
-    border-bottom: 1px solid var(--border);
   }
 
   .brand {
     display: flex;
     align-items: center;
     gap: 0.4em;
-    padding: 0 0.6em 0 0.7em;
+    justify-content: center;
+    padding: 0.3rem 0.9rem 0 0.95rem; /* 上を空けて、タブ名と高さを揃える */
     color: var(--fg);
     font-size: 0.82rem;
     font-weight: 600;

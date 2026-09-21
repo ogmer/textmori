@@ -159,7 +159,7 @@
     max-width: calc(100vw - 2rem);
     max-height: calc(100vh - 2rem);
     overflow-y: auto;
-    padding: 1.25em 1.5em;
+    padding: 2em 2.4em;
     border-radius: var(--radius);
     background: var(--bg);
     color: var(--fg);
@@ -167,7 +167,7 @@
     box-shadow: var(--shadow-popup);
     display: flex;
     flex-direction: column;
-    gap: 0.7em;
+    gap: 1.2em;
     animation: popup-in 0.12s var(--ease);
   }
 
@@ -207,7 +207,7 @@
   }
 
   .field input[type="text"] {
-    padding: 0.4em 0.6em;
+    padding: 0.5em 0.8em;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--bg);
@@ -294,7 +294,7 @@
   }
 
   button {
-    padding: 0.45em 0.9em;
+    padding: 0.55em 1.2em;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: none;

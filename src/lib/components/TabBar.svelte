@@ -37,8 +37,8 @@
         title={tab.path ?? tab.name}
         onclick={() => onselect(tab.id)}
       >
-        <span class="dot" class:visible={tab.dirty} aria-hidden="true">●</span>
         <span class="name" class:cjk={isCjk(tab.name)}>{tab.name}</span>
+        <span class="dot" class:visible={tab.dirty} aria-hidden="true">●</span>
         {#if tab.dirty}<span class="sr-only">(未保存)</span>{/if}
       </button>
       <button
@@ -63,7 +63,7 @@
     padding: 0.32em 0.4em 0;
     overflow-x: auto;
     background: var(--tabbar-bg);
-    scrollbar-width: thin;
+    scrollbar-width: none;
     user-select: none;
   }
 
@@ -87,7 +87,7 @@
   }
 
   .tab.active {
-    background: var(--bg);
+    background: var(--chrome-bg);
     color: var(--fg);
     /* 選択中のタブを細いアクセント線でさりげなく示す */
     box-shadow: inset 0 2px 0 var(--accent);
@@ -121,6 +121,7 @@
 
   .dot {
     flex: 0 0 auto;
+    margin-left: auto;
     font-size: 0.6em;
     color: var(--accent);
     visibility: hidden;
@@ -131,8 +132,15 @@
   }
 
   .close {
-    padding: 0 0.75em;
-    align-self: stretch;
+    flex: 0 0 auto;
+    width: 1.55rem;
+    height: 1.55rem;
+    margin: 0 0.5rem 0 0.1rem;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    align-self: center;
+    position: relative;
+    top: 2px; /* タブ名の文字の高さに合わせて少し下げる */
     border: 0;
     background: none;
     color: var(--muted);
@@ -155,6 +163,7 @@
   .add {
     flex: 0 0 auto;
     width: 2.6em;
+    padding-top: 8px; /* 文字を少し下げて、タブ名の高さに合わせる */
     align-self: stretch;
     border: 0;
     background: none;
