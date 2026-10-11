@@ -43,12 +43,8 @@ macOS では `Ctrl` の代わりに `Cmd`(`Alt+Z` は `Option+Z`)を使う。
 ## 開発
 
 ```sh
-npm install
 npm run tauri dev     # 開発用に起動
 npm run tauri build   # 配布用にビルド
-npm run check         # 型チェック
-npm run test          # フロントエンドのユニットテスト(Vitest)
-cd src-tauri && cargo test  # Rust 側のユニットテスト(文字コード判定・設定ファイルのパース等)
 ```
 
 ## 構成
